@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { Search, TrendingUp, Home, MapPin, ArrowLeft, ArrowRight, ChevronDown, Moon, Sun } from 'lucide-react';
