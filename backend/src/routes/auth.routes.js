@@ -1,7 +1,27 @@
-const router = require('express').Router();
-import { signup, login } from '../controllers/auth.controller';
+import express from "express";
+import { signup, login, logout } from "../controllers/auth.controller.js";
 
-router.post('/signup', signup);
-router.post('/login', login);
+const router = express.Router();
+
+/**
+ * @route   POST /api/auth/signup
+ * @desc    Register a new user
+ * @access  Public
+ */
+router.post("/signup", signup);
+
+/**
+ * @route   POST /api/auth/login
+ * @desc    Login user
+ * @access  Public
+ */
+router.post("/login", login);
+
+/**
+ * @route   POST /api/auth/logout
+ * @desc    Logout user
+ * @access  Public
+ */
+router.post("/logout", logout);
 
 export default router;
