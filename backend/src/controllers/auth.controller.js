@@ -28,17 +28,19 @@ export async function signup(req, res) {
     if (password.length < 8) {
       return res.status(400).json({
         message: "Password must be at least 8 characters long."
-  });
-  }
+      });
+    }
 
-    // 2. Validate question IDs
+    // 2. Validate question IDs and answers
     const validQuestionIds = securityQuestions.map(q => q.id);
+
     for (const q of userQuestions) {
       if (!validQuestionIds.includes(q.questionId)) {
         return res.status(400).json({
           message: "Invalid security question selected."
         });
       }
+
       if (!q.answer || q.answer.trim() === "") {
         return res.status(400).json({
           message: "Security question answers cannot be empty."
@@ -94,14 +96,12 @@ export async function login(req, res) {
   try {
     const { username, password } = req.body;
 
-    // 1. Validate input
     if (!username || !password) {
       return res.status(400).json({
         message: "Please fill in both username and password."
       });
     }
 
-    // 2. Find user
     const user = await User.findOne({ username });
     if (!user) {
       return res.status(401).json({
@@ -109,7 +109,6 @@ export async function login(req, res) {
       });
     }
 
-    // 3. Compare passwords
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(401).json({
@@ -117,21 +116,16 @@ export async function login(req, res) {
       });
     }
 
-    // 4. Generate JWT
     if (!process.env.JWT_SECRET) {
       throw new Error("JWT_SECRET is not defined");
     }
 
     const token = jwt.sign(
-      {
-        id: user._id,
-        username: user.username
-      },
+      { id: user._id, username: user.username },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
 
-    // 5. Respond
     return res.status(200).json({
       message: "Login successful.",
       token
@@ -141,6 +135,115 @@ export async function login(req, res) {
     console.error("Login error:", error);
     return res.status(500).json({
       message: "Server error during login."
+    });
+  }
+}
+
+/**
+ * @desc    Forgot password – get user's security questions
+ * @route   POST /api/auth/forgot-password
+ * @access  Public
+ */
+export async function forgotPassword(req, res) {
+  try {
+    const { username } = req.body;
+
+    if (!username) {
+      return res.status(400).json({
+        message: "Username is required."
+      });
+    }
+
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found."
+      });
+    }
+
+    // Return ONLY the questions (no answers)
+    const questions = user.securityQuestions.map(q => {
+      const question = securityQuestions.find(sq => sq.id === q.questionId);
+      return {
+        questionId: q.questionId,
+        text: question.text
+      };
+    });
+
+    return res.json({ questions });
+
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    return res.status(500).json({
+      message: "Server error."
+    });
+  }
+}
+
+/**
+ * @desc    Reset password after answering security questions
+ * @route   POST /api/auth/reset-password
+ * @access  Public
+ */
+export async function resetPassword(req, res) {
+  try {
+    const { username, answers, newPassword } = req.body;
+
+    if (!username || !answers || answers.length !== 2 || !newPassword) {
+      return res.status(400).json({
+        message: "Invalid input."
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        message: "Password must be at least 8 characters long."
+      });
+    }
+
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found."
+      });
+    }
+
+    // Verify each answer
+    for (const userAnswer of answers) {
+      const storedQuestion = user.securityQuestions.find(
+        q => q.questionId === userAnswer.questionId
+      );
+
+      if (!storedQuestion) {
+        return res.status(400).json({
+          message: "Invalid security question."
+        });
+      }
+
+      const isMatch = await bcrypt.compare(
+        userAnswer.answer.toLowerCase(),
+        storedQuestion.answer
+      );
+
+      if (!isMatch) {
+        return res.status(401).json({
+          message: "Incorrect security answers."
+        });
+      }
+    }
+
+    // Update password
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    return res.json({
+      message: "Password reset successful."
+    });
+
+  } catch (error) {
+    console.error("Reset password error:", error);
+    return res.status(500).json({
+      message: "Server error."
     });
   }
 }
