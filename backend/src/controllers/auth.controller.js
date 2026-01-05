@@ -1,7 +1,7 @@
 import User from "../models/User.model.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import securityQuestions from "../constants/securityQuestions.js";
+import securityQuestions from "../constants/securityQuestions.constants.js";
 
 /**
  * @desc    Register a new user

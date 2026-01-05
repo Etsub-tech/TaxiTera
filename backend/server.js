@@ -1,8 +1,7 @@
-require('dotenv').config();
-import { listen } from './src/app';
+import app from "./src/app.js";
 
 const PORT = process.env.PORT || 5000;
 
-listen(PORT, () => {
-  console.log(`TaxiTera backend running on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });

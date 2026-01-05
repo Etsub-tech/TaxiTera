@@ -1,16 +1,20 @@
-import mongoose from 'mongoose';
+import express from "express";
+import { searchTerminals } from "../controllers/terminal.controller.js";
+import Terminal from "../models/Terminal.model.js";
 
-const TerminalSchema = new mongoose.Schema({
-    name: String,
-    area: String,
-    routes: [String],
-    price: Number,
-    location: {
-    type: { type: String, enum: ['Point'], default: 'Point' },
-    coordinates: { type: [Number], required: true }
+const router = express.Router();
+
+// Get all terminals (for debugging)
+router.get("/", async (req, res) => {
+  try {
+    const terminals = await Terminal.find();
+    res.json(terminals);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 
-TerminalSchema.index({ location: '2dsphere' });
+// Search nearby terminals (guest or logged-in)
+router.post("/search", searchTerminals);
 
-module.exports = mongoose.model('Terminal', TerminalSchema);
+export default router;

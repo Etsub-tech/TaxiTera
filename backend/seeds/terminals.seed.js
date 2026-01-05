@@ -1,6 +1,6 @@
-require('dotenv').config();
-const mongoose = require('mongoose');
-const Terminal = require('../src/models/Terminal.model');
+import "dotenv/config";
+import mongoose from "mongoose";
+import Terminal from "../src/models/Terminal.model.js";  // 👈 import the model itself
 
 const terminals = [
   {
@@ -10,8 +10,8 @@ const terminals = [
     price: 35,
     location: {
       type: "Point",
-      coordinates: [38.7993, 9.0243]
-    }
+      coordinates: [38.7993, 9.0243],
+    },
   },
   {
     name: "Bole Terminal",
@@ -20,19 +20,19 @@ const terminals = [
     price: 40,
     location: {
       type: "Point",
-      coordinates: [38.7816, 9.0054]
-    }
-  }
+      coordinates: [38.7816, 9.0054],
+    },
+  },
 ];
 
 (async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI);
-    await Terminal.insertMany(terminals);
+    await Terminal.insertMany(terminals);   // 👈 call insertMany on the model
     console.log("Terminal data seeded successfully");
     process.exit();
   } catch (err) {
-    console.error(err);
+    console.error("Seeding error:", err.message);
     process.exit(1);
   }
 })();
