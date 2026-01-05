@@ -21,4 +21,4 @@ app.use('/api/auth', authRoutes);
 app.use('/api/terminals', terminalRoutes);
 app.use('/api/history', historyRoutes);
 
-module.exports = app;
+export default app;
