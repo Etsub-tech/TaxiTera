@@ -180,6 +180,10 @@ export async function forgotPassword(req, res) {
   }
 }
 
+export function getSecurityQuestions(req, res) {
+  return res.json(securityQuestions);
+}
+
 /**
  * @desc    Reset password after answering security questions
  * @route   POST /api/auth/reset-password
