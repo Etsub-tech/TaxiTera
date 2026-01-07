@@ -30,12 +30,14 @@
             "@radix-ui/react-toggle": "^1.1.2",
             "@radix-ui/react-toggle-group": "^1.1.2",
             "@radix-ui/react-tooltip": "^1.1.8",
+            "@react-google-maps/api": "^2.20.8",
             "class-variance-authority": "^0.7.1",
             "clsx": "*",
             "cmdk": "^1.1.1",
             "embla-carousel-react": "^8.6.0",
             "hono": "*",
             "input-otp": "^1.4.2",
+            "leaflet": "^1.9.4",
             "lucide-react": "^0.487.0",
             "motion": "*",
             "next-themes": "^0.4.6",
@@ -43,6 +45,7 @@
             "react-day-picker": "^8.10.1",
             "react-dom": "^18.3.1",
             "react-hook-form": "^7.55.0",
+            "react-leaflet": "^4.2.1",
             "react-resizable-panels": "^2.1.7",
             "react-router-dom": "*",
             "recharts": "^2.15.2",
@@ -52,10 +55,7 @@
       },
       "devDependencies": {
             "@types/node": "^20.10.0",
-            "@types/react": "^19.2.7",
-            "@types/react-dom": "^19.2.3",
             "@vitejs/plugin-react-swc": "^3.10.2",
-            "typescript": "^5.9.3",
             "vite": "6.3.5"
       },
       "scripts": {

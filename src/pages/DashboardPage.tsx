@@ -101,7 +101,8 @@ export default function DashboardPage() {
           </div>
         </div>
       </header>
-
+     <br />
+     <br />
       <div className="max-w-6xl mx-auto px-6 py-8">
         {/* Welcome Message */}
         <h1 className={`text-3xl mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
@@ -125,7 +126,7 @@ export default function DashboardPage() {
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <MapPin className="w-5 h-5 text-blue-400" />
-                  <label className="text-white">From (Origin)</label>
+                  <label className="text-white1">From (Origin)</label>
                 </div>
                 <div className="relative">
                   <input
@@ -144,7 +145,7 @@ export default function DashboardPage() {
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <MapPin className="w-5 h-5 text-blue-400" />
-                  <label className="text-white">To (Destination)</label>
+                  <label className="text-white1">To (Destination)</label>
                 </div>
                 <div className="relative">
                   <input

@@ -46,7 +46,7 @@ export default function WelcomePage() {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.4, duration: 0.5 }}
-          className="text-5xl text-white mb-4"
+          className="text-2xlb text-gray-200"
         >
           Welcome to TaxiTera!
         </motion.h1>
@@ -55,7 +55,7 @@ export default function WelcomePage() {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.6, duration: 0.5 }}
-          className="text-2xl text-gray-200"
+          className="text-2xlb text-gray-200"
         >
           {user?.username}, you're all set to find your route
         </motion.p>

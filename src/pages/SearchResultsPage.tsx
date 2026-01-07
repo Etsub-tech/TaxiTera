@@ -182,7 +182,6 @@ export default function SearchResultsPage() {
                   Option {route.optionNumber}
                 </span>
               </div>
-
               {/* Route Details */}
               <div className="p-6">
                 {/* From/To */}
@@ -197,7 +196,6 @@ export default function SearchResultsPage() {
                     <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{to}</p>
                   </div>
                 </div>
-
                 {/* Terminal Info */}
                 <div className="mb-6">
                   <div className="flex items-center gap-2 mb-2">
@@ -206,7 +204,6 @@ export default function SearchResultsPage() {
                   </div>
                   <p className={`text-lg ml-7 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{route.terminal}</p>
                 </div>
-
                 {/* Stops along the way */}
                 {route.stops.length > 0 && (
                   <div className="mb-6">

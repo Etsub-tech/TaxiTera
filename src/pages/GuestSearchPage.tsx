@@ -83,7 +83,7 @@ export default function GuestSearchPage() {
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <MapPin className="w-5 h-5 text-blue-400" />
-                  <label className="text-white">From (Origin)</label>
+                  <label className="text-white1">From (Origin)</label>
                 </div>
                 <div className="relative">
                   <input
@@ -102,7 +102,7 @@ export default function GuestSearchPage() {
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <MapPin className="w-5 h-5 text-blue-400" />
-                  <label className="text-white">To (Destination)</label>
+                  <label className="text-white1">To (Destination)</label>
                 </div>
                 <div className="relative">
                   <input

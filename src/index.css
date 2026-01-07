@@ -2113,3 +2113,44 @@ html {
     transform: none;
   }
 }
+/* Override text-gray-300 to be theme-aware */
+.text-gray-300 {
+  color: var(--foreground);
+}
+
+/* Optional: if headings should also follow theme */
+.text-4xl {
+  color: var(--foreground);
+}
+.text-5xl{
+    color: var(--foreground);
+}
+.text-2xl{
+    color: var(--foreground);  
+}
+.text-2xlr {
+    font-size: var(--text-2xl);
+    line-height: var(--tw-leading, var(--text-2xl--line-height));
+  }
+.text-5xlr {
+    font-size: var(--text-5xl);
+    line-height: var(--tw-leading, var(--text-5xl--line-height));
+  }
+.text-2xlx {
+    font-size: var(--text-2xl);
+    line-height: var(--tw-leading, var(--text-2xl--line-height));
+  }
+.text-white1{
+    color: var(--foreground);  
+}
+.p-6{
+    color: var(--foreground);  
+}
+.p-6 {
+  color: var(--foreground);
+  background-color: var(--background); 
+}
+.text-2xlb{
+    color: var(--foreground); 
+}
+

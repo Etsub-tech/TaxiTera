@@ -26,13 +26,12 @@ export default function HomePage() {
 
   return (
     <div className={isDarkMode ? 'min-h-screen bg-gray-900' : 'min-h-screen bg-white'}>
-      <Header />
-      
+      <Header />  
       {/* Hero Section */}
       <section 
         className="relative h-screen flex items-center justify-center"
         style={{
-          backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url(${image_d72601503a35aae327af99527666c7086e93fed9})`,
+          backgroundImage: `linear-gradient(rgba(43, 41, 41, 0.6), rgba(0, 0, 0, 0.6)), url(${image_d72601503a35aae327af99527666c7086e93fed9})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundAttachment: 'fixed'
@@ -45,7 +44,7 @@ export default function HomePage() {
           className="text-center text-white px-6 max-w-4xl"
         >
           <h1 className="text-6xl mb-6">Find Your Taxi Terminal</h1>
-          <p className="text-2xl mb-8 text-gray-200">
+          <p className="text-2xlr mb-8 text-gray-200">
             Navigate Addis Ababa's minibus taxi network with ease
           </p>
           <button 
@@ -128,7 +127,6 @@ export default function HomePage() {
           </div>
         </div>
       </motion.section>
-
       {/* Problem: Long Wait Times - Staggered Left Lower */}
       <motion.section 
         initial={{ opacity: 0 }}
@@ -151,6 +149,7 @@ export default function HomePage() {
                 alt="Traffic in Addis Ababa" 
                 className="w-full h-96 object-cover shadow-2xl"
               />
+
             </motion.div>
             <div className="md:w-1/2 text-white">
               <div className="flex items-center gap-3 mb-4">
@@ -165,6 +164,8 @@ export default function HomePage() {
         </div>
       </motion.section>
 
+   
+   
       {/* How It Works Section */}
       <motion.section 
         initial={{ opacity: 0 }}
@@ -193,7 +194,6 @@ export default function HomePage() {
                 Create an account to save your preferences or continue as a guest
               </p>
             </motion.div>
-
             {/* Step 2 */}
             <motion.div 
               initial={{ opacity: 0, y: 30 }}
@@ -210,7 +210,6 @@ export default function HomePage() {
                 Select your origin and destination from our comprehensive list
               </p>
             </motion.div>
-
             {/* Step 3 */}
             <motion.div 
               initial={{ opacity: 0, y: 30 }}
@@ -227,7 +226,6 @@ export default function HomePage() {
                 See the best, nearest, and fastest routes to your destination
               </p>
             </motion.div>
-
             {/* Step 4 */}
             <motion.div 
               initial={{ opacity: 0, y: 30 }}
@@ -247,7 +245,6 @@ export default function HomePage() {
           </div>
         </div>
       </motion.section>
-
       {/* Call to Action and Footer Section */}
       <section className={isDarkMode ? 'bg-blue-950 py-24 text-center' : 'bg-blue-900 py-24 text-center'}>
         <div className="max-w-4xl mx-auto px-6">
@@ -257,20 +254,16 @@ export default function HomePage() {
             transition={{ duration: 0.8 }}
             viewport={{ once: true }}
           >
-            <h2 className="text-5xl text-white mb-6">
+            <h2 className="text-5xlr text-white mb-6">
               Ready to Navigate Addis Ababa?
             </h2>
-            <p className="text-2xl text-gray-300 mb-10">
-              Join thousands of commuters who trust TaxiTera for their daily travel
-            </p>
+
             <button 
               onClick={handleGetStarted}
-              className="px-16 py-5 bg-blue-600 text-white text-xl hover:bg-blue-700 transition-all duration-300 transform hover:scale-105"
-            >
+              className="px-16 py-5 bg-blue-600 text-white text-xl hover:bg-blue-700 transition-all duration-300 transform hover:scale-105">
               Get Started
             </button>
-          </motion.div>
-          
+          </motion.div> 
           <div className={`mt-20 pt-8 border-t ${isDarkMode ? 'border-blue-800' : 'border-blue-700'}`}>
             <p className="text-gray-400">© 2025 TaxiTera. All rights reserved.</p>
           </div>
