@@ -19,14 +19,27 @@ export default function RegisterPage() {
 
   // Mocked backend call to get security questions
   useEffect(() => {
-    // Normally you fetch from backend
-    setSecurityQuestions([
-      { id: 1, question: 'What is your mother’s maiden name?' },
-      { id: 2, question: 'What was your first pet’s name?' },
-      { id: 3, question: 'What city were you born in?' },
-      { id: 4, question: 'What is your favorite color?' },
-    ]);
+    const fetchQuestions = async () => {
+      try {
+        const res = await fetch(
+          'https://taxitera-fv1x.onrender.com/api/auth/security-questions'
+        );
+        const data = await res.json();
+
+        setSecurityQuestions(
+          data.map((q: any) => ({
+            id: q.id,
+            question: q.text
+          }))
+        );
+      } catch {
+        toast.error('Failed to load security questions');
+      }
+    };
+
+    fetchQuestions();
   }, []);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,20 +80,20 @@ export default function RegisterPage() {
     try {
       // Replace this URL with your actual backend API
       const res = await fetch(
-  'https://taxitera-fv1x.onrender.com/api/auth/signup',
-  {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      username,
-      password,
-      securityQuestions: [
-        { questionId: Number(selectedQuestion1), answer: answer1.trim() },
-        { questionId: Number(selectedQuestion2), answer: answer2.trim() }
-      ]
-    })
-  }
-);
+        'https://taxitera-fv1x.onrender.com/api/auth/signup',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username,
+            password,
+            securityQuestions: [
+              { questionId: Number(selectedQuestion1), answer: answer1.trim() },
+              { questionId: Number(selectedQuestion2), answer: answer2.trim() }
+            ]
+          })
+        }
+      );
 
 
       const data = await res.json();

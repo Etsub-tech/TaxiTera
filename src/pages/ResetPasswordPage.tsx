@@ -5,9 +5,10 @@ import { toast } from 'sonner';
 import nightTaxiRoadImage from 'figma:asset/4d5bb451231e240c7d8e991bfdfd55b0d2686a01.png';
 
 interface SecurityQuestion {
-  id: number;
-  question: string;
+  questionId: number;
+  text: string;
 }
+
 
 export default function ResetPasswordPage() {
   const [step, setStep] = useState<'username' | 'questions' | 'success'>('username');
@@ -24,14 +25,23 @@ export default function ResetPasswordPage() {
   // Step 1: Get security questions
   const handleUsernameSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     setLoading(true);
+    setError('');
+
     try {
-      const res = await fetch(`http://localhost:5000/api/auth/security-questions/${username}`);
-      if (!res.ok) throw new Error('Username not found');
-      const questions: SecurityQuestion[] = await res.json();
-      if (questions.length < 2) throw new Error('Security questions not set for this user');
-      setSecurityQuestions(questions);
+      const res = await fetch(
+        'https://taxitera-fv1x.onrender.com/api/auth/forgot-password',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username })
+        }
+      );
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+
+      setSecurityQuestions(data.questions); // ✔ correct
       setStep('questions');
     } catch (err: any) {
       setError(err.message);
@@ -41,49 +51,42 @@ export default function ResetPasswordPage() {
     }
   };
 
+
+
   // Step 2: Verify answers and reset password
   const handleResetSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    // Validation
-    if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters long');
-      toast.error('Password must be at least 8 characters long');
-      return;
-    }
     if (newPassword !== confirmPassword) {
-      setError('Passwords do not match');
       toast.error('Passwords do not match');
       return;
     }
 
     setLoading(true);
-    try {
-      // Verify security answers
-      const verifyRes = await fetch(`http://localhost:5000/api/auth/verify-answers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username,
-          answers: [
-            { questionId: securityQuestions[0].id, answer: answer1 },
-            { questionId: securityQuestions[1].id, answer: answer2 }
-          ]
-        })
-      });
-      if (!verifyRes.ok) throw new Error('Incorrect security answers');
 
-      // Reset password
-      const resetRes = await fetch(`http://localhost:5000/api/auth/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, newPassword })
-      });
-      if (!resetRes.ok) throw new Error('Failed to reset password');
+    try {
+      const res = await fetch(
+        'https://taxitera-fv1x.onrender.com/api/auth/reset-password',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username,
+            answers: [
+              { questionId: securityQuestions[0].questionId, answer: answer1 },
+              { questionId: securityQuestions[1].questionId, answer: answer2 }
+            ],
+            newPassword
+          })
+        }
+      );
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
 
       setStep('success');
-      toast.success('Password reset successfully!');
+      toast.success('Password reset successful!');
     } catch (err: any) {
       setError(err.message);
       toast.error(err.message);
@@ -92,12 +95,14 @@ export default function ResetPasswordPage() {
     }
   };
 
+
+
   const handleBackToLogin = () => {
     navigate('/login');
   };
 
   return (
-    <div 
+    <div
       className="min-h-screen flex items-center justify-center px-6 py-12"
       style={{
         backgroundImage: `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url(${nightTaxiRoadImage})`,
@@ -166,7 +171,10 @@ export default function ResetPasswordPage() {
             <div>
               <label className="block text-white mb-2">Security Question 1 *</label>
               <div className="mb-3 p-3 bg-gray-800/50 border border-blue-500/20 rounded">
-                <p className="text-blue-300 text-sm">{securityQuestions[0]?.question}</p>
+                <p className="text-blue-300 text-sm">
+                  {securityQuestions[0]?.text}
+                </p>
+
               </div>
               <input
                 type="text"
@@ -181,7 +189,10 @@ export default function ResetPasswordPage() {
             <div>
               <label className="block text-white mb-2">Security Question 2 *</label>
               <div className="mb-3 p-3 bg-gray-800/50 border border-blue-500/20 rounded">
-                <p className="text-blue-300 text-sm">{securityQuestions[1]?.question}</p>
+                <p className="text-blue-300 text-sm">
+                  {securityQuestions[1]?.text}
+                </p>
+
               </div>
               <input
                 type="text"

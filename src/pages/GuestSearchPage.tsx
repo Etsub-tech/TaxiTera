@@ -12,6 +12,9 @@ const POPULAR_ROUTES = [
   { from: 'Autobus Tera', to: 'Mercato', popularity: 'Very Popular' },
 ];
 
+
+
+
 export default function GuestSearchPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -21,6 +24,9 @@ export default function GuestSearchPage() {
   const navigate = useNavigate();
 
   // Fetch suggestions from API
+
+
+
   const fetchSuggestions = async (query: string, type: 'from' | 'to') => {
     if (!query) return;
     try {

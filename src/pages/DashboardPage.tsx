@@ -39,23 +39,63 @@ export default function DashboardPage() {
   // Fetch suggestions from API
   const fetchSuggestions = async (query: string, type: 'from' | 'to') => {
     if (!query) return;
+
     try {
-      const response = await fetch(`https://your-api.com/terminals?query=${encodeURIComponent(query)}`);
-      const data: string[] = await response.json(); // assuming array of strings
-      if (type === 'from') setFromSuggestions(data);
-      else setToSuggestions(data);
-    } catch (error) {
-      console.error('Error fetching suggestions:', error);
+      const res = await fetch('https://taxitera-fv1x.onrender.com/api/terminals');
+      if (!res.ok) throw new Error('Failed to fetch terminals');
+      const data: { name: string }[] = await res.json();
+
+      // Filter terminals containing query text
+      const suggestions = data
+        .map(t => t.name)
+        .filter(name => name.toLowerCase().includes(query.toLowerCase()));
+
+      if (type === 'from') setFromSuggestions(suggestions);
+      else setToSuggestions(suggestions);
+
+    } catch (err) {
+      console.error('Error fetching terminals:', err);
     }
   };
 
-  const handleSearch = (e: React.FormEvent) => {
+
+
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (from && to) {
-      addSearchHistory(from, to);
-      navigate('/search-results', { state: { from, to } });
+    if (!from || !to) return;
+
+    setLoading(true);
+
+    try {
+      // Optional: get user coordinates
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject);
+      });
+
+      const latitude = position.coords.latitude;
+      const longitude = position.coords.longitude;
+
+      const res = await fetch('https://taxitera-fv1x.onrender.com/api/terminals/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latitude, longitude, destination: to }),
+      });
+
+      if (!res.ok) throw new Error('Failed to search terminals');
+
+      const terminals = await res.json(); // Array of terminals
+      console.log('Search results:', terminals);
+
+      // Navigate to map or search results page with data
+      navigate('/map', { state: { from, to, terminals } });
+
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
+
 
   const handleLogout = () => {
     logout();
@@ -279,13 +319,12 @@ export default function DashboardPage() {
                     <span className={isDarkMode ? 'text-white' : 'text-black'}>{route.to}</span>
                   </div>
                   <span
-                    className={`px-4 py-1.5 rounded-full text-sm ${
-                      route.popularity === 'Very Popular'
+                    className={`px-4 py-1.5 rounded-full text-sm ${route.popularity === 'Very Popular'
                         ? 'bg-blue-600 text-white'
                         : isDarkMode
-                        ? 'bg-blue-400/30 text-blue-200 border border-blue-400/50'
-                        : 'bg-blue-100 text-blue-700 border border-blue-300'
-                    }`}
+                          ? 'bg-blue-400/30 text-blue-200 border border-blue-400/50'
+                          : 'bg-blue-100 text-blue-700 border border-blue-300'
+                      }`}
                   >
                     {route.popularity}
                   </span>

@@ -28,27 +28,126 @@ export default function SearchResultsPage() {
   const [routes, setRoutes] = useState<RouteOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [debugInfo, setDebugInfo] = useState<{
+    payload?: any;
+    requestUrl?: string;
+    responseStatus?: string;
+    responseBody?: any;
+    geolocationError?: string;
+    geocodeError?: string;
+  } | null>(null);
 
   const { from, to, isGuest } = location.state || { from: '', to: '', isGuest: false };
+  const [resolvedFrom, setResolvedFrom] = useState<{ latitude: number; longitude: number; name?: string } | null>(
+    typeof from === 'object' && from && 'latitude' in from && 'longitude' in from ? { latitude: from.latitude, longitude: from.longitude, name: (from as any).name } : null
+  );
 
   // Fetch routes from backend
   useEffect(() => {
     if (!from || !to) return;
-    const fetchRoutes = async () => {
+
+    const geocodePlace = async (place: string) => {
+      try {
+        const key = (import.meta as any).env.VITE_GOOGLE_GEOCODE_API_KEY;
+        if (!key) {
+          const msg = 'Google Geocode API key not configured';
+          setDebugInfo((d) => ({ ...(d || {}), geocodeError: msg }));
+          throw new Error(msg);
+        }
+        const res = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(place)}&key=${key}`
+        );
+        const d = await res.json().catch(() => null);
+        if (!res.ok) {
+          const bodyText = d ? JSON.stringify(d) : await res.text().catch(() => '');
+          const msg = `Geocode HTTP ${res.status} ${res.statusText} ${bodyText}`;
+          setDebugInfo((cur) => ({ ...(cur || {}), geocodeError: msg }));
+          throw new Error(msg);
+        }
+        if (!d || d.status !== 'OK' || !d.results || d.results.length === 0) {
+          const msg = `No geocoding results: ${d ? JSON.stringify(d) : 'empty response'}`;
+          setDebugInfo((cur) => ({ ...(cur || {}), geocodeError: msg }));
+          throw new Error(msg);
+        }
+        const loc = d.results[0].geometry.location;
+        return { latitude: loc.lat, longitude: loc.lng };
+      } catch (e: any) {
+        console.error('Geocode error:', e.message || e);
+        return null;
+      }
+    };
+
+    const resolveFromAndFetch = async () => {
       setLoading(true);
       setError('');
       try {
-        const res = await fetch(`https://your-backend.com/api/routes?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-        if (!res.ok) throw new Error('Failed to fetch routes');
-        const data: RouteOption[] = await res.json();
+        let coords = resolvedFrom;
+
+        // If resolvedFrom not set, try to resolve
+        if (!coords) {
+          // If `from` is an object with coords use it
+          if (typeof from === 'object' && (from as any).latitude && (from as any).longitude) {
+            coords = { latitude: (from as any).latitude, longitude: (from as any).longitude, name: (from as any).name };
+          } else {
+            // Try browser geolocation first (this will trigger browser permission prompt)
+            if (navigator.geolocation) {
+              try {
+                coords = await new Promise((resolve, reject) => {
+                  navigator.geolocation.getCurrentPosition(
+                    (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+                    (err) => reject(err),
+                    { enableHighAccuracy: true, timeout: 10000 }
+                  );
+                });
+              } catch (e: any) {
+                const geolMsg = e && e.message ? e.message : 'Geolocation failed or denied';
+                setDebugInfo((cur) => ({ ...(cur || {}), geolocationError: geolMsg }));
+                coords = null as any;
+              }
+            }
+
+            // If still no coords and user typed a `from` string, try Google Geocoding (requires VITE_GOOGLE_GEOCODE_API_KEY)
+            if (!coords && typeof from === 'string') {
+              const g = await geocodePlace(from);
+              if (g) coords = { latitude: g.latitude, longitude: g.longitude, name: from };
+            }
+          }
+        }
+
+        if (!coords) throw new Error('Could not determine origin coordinates. Allow location access or set VITE_GOOGLE_GEOCODE_API_KEY for place-name lookup.');
+
+        setResolvedFrom(coords as any);
+
+        // Send request to backend
+        const requestUrl = 'https://taxitera-fv1x.onrender.com/api/terminals/search';
+        const payload = { latitude: coords.latitude, longitude: coords.longitude, destination: typeof to === 'string' ? to : (to as any).name };
+        setDebugInfo((cur) => ({ ...(cur || {}), payload, requestUrl }));
+
+        const res = await fetch(requestUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const bodyText = await res.text().catch(() => '');
+        setDebugInfo((cur) => ({ ...(cur || {}), responseStatus: `${res.status} ${res.statusText}`, responseBody: bodyText }));
+
+        if (!res.ok) {
+          throw new Error(`Failed to fetch routes: ${res.status} ${res.statusText} ${bodyText}`);
+        }
+
+        // parse JSON from the bodyText we already captured
+        const data: RouteOption[] = bodyText ? JSON.parse(bodyText) : [];
         setRoutes(data);
       } catch (err: any) {
-        setError(err.message);
+        setError(err.message || String(err));
+        console.error('SearchResults error details:', debugInfo, err);
       } finally {
         setLoading(false);
       }
     };
-    fetchRoutes();
+
+    resolveFromAndFetch();
   }, [from, to]);
 
   const handleLogout = () => {
@@ -58,7 +157,7 @@ export default function SearchResultsPage() {
   };
 
   const handleRouteClick = (route: RouteOption) => {
-    navigate('/map', { state: { route, from, to, isGuest } });
+    navigate('/map', { state: { route, from: resolvedFrom ?? from, to, isGuest } });
   };
 
   return (
@@ -125,6 +224,12 @@ export default function SearchResultsPage() {
 
         {loading && <p className={isDarkMode ? 'text-white' : 'text-gray-800'}>Loading routes...</p>}
         {error && <p className="text-red-500 mb-4">{error}</p>}
+        {debugInfo && (
+          <div className="mt-4 p-3 bg-gray-50/90 rounded border">
+            <h4 className="text-sm font-medium mb-2">Debug info</h4>
+            <pre className="text-xs overflow-auto max-h-48">{JSON.stringify(debugInfo, null, 2)}</pre>
+          </div>
+        )}
 
         <div className="space-y-6">
           {routes.map((route) => (
