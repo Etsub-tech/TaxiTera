@@ -66,11 +66,22 @@ export default function RegisterPage() {
 
     try {
       // Replace this URL with your actual backend API
-      const res = await fetch('https://your-backend-api.com/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, securityAnswers }),
-      });
+      const res = await fetch(
+  'https://taxitera-fv1x.onrender.com/api/auth/signup',
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username,
+      password,
+      securityQuestions: [
+        { questionId: Number(selectedQuestion1), answer: answer1.trim() },
+        { questionId: Number(selectedQuestion2), answer: answer2.trim() }
+      ]
+    })
+  }
+);
+
 
       const data = await res.json();
 
