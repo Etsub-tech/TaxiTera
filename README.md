@@ -9,3 +9,5 @@
 
   Run `npm run dev` to start the development server.
   
+  Run `npm install axios` adds Axios to the project dependencies.
+  
