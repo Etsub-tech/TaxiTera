@@ -1,0 +1,110 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import { Clock, MapPin, ArrowLeft, ArrowRight } from 'lucide-react';
+import logoImage from 'figma:asset/5915e0617cff13c3e21f224b1e9a79ae0981b769.png';
+
+interface SearchHistoryItem {
+  from: string;
+  to: string;
+  timestamp: number;
+}
+
+export default function HistoryPage() {
+  const { user } = useAuth(); // Assuming you have user token or ID
+  const { isDarkMode } = useTheme();
+  const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const formatDate = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        // Replace with your backend endpoint
+        const res = await fetch(`https://your-api.com/users/${user?.id}/history`, {
+          headers: {
+            Authorization: `Bearer ${user?.token}`, // If you use JWT auth
+          },
+        });
+        const data: SearchHistoryItem[] = await res.json();
+        setSearchHistory(data);
+      } catch (err) {
+        console.error('Failed to fetch search history', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchHistory();
+    } else {
+      setLoading(false); // No user, nothing to fetch
+    }
+  }, [user]);
+
+  return (
+    <div className={`min-h-screen ${isDarkMode ? 'bg-[#1a252f]' : 'bg-gray-50'}`}>
+      {/* Header */}
+      <header className={`${isDarkMode ? 'bg-gray-900/90' : 'bg-white'} backdrop-blur-md border-b ${isDarkMode ? 'border-blue-500/30' : 'border-gray-200'}`}>
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <Link to="/">
+            <img src={logoImage} alt="TaxiTera Logo" className="h-12 w-auto cursor-pointer" />
+          </Link>
+          <Link to="/dashboard" className={`flex items-center gap-2 ${isDarkMode ? 'text-white hover:text-blue-300' : 'text-gray-800 hover:text-blue-600'} transition-colors`}>
+            <ArrowLeft className="w-5 h-5" />
+            <span>Back to Dashboard</span>
+          </Link>
+        </div>
+      </header>
+
+      <div className="max-w-4xl mx-auto px-6 py-12">
+        <h1 className={`text-4xl mb-8 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Search History</h1>
+
+        {loading ? (
+          <p className={isDarkMode ? 'text-white' : 'text-gray-700'}>Loading...</p>
+        ) : searchHistory.length === 0 ? (
+          <div className={`${isDarkMode ? 'bg-white/10 border-blue-300/40' : 'bg-white border-gray-200'} backdrop-blur-xl border rounded-lg p-12 text-center`}>
+            <Clock className={`w-16 h-16 mx-auto mb-4 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+            <p className={`text-xl ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No search history yet</p>
+            <p className={`mt-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>Start searching for routes to build your history</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {searchHistory.map((item, index) => (
+              <div
+                key={index}
+                className={`${isDarkMode ? 'bg-white/10 border-blue-300/40 hover:bg-white/15' : 'bg-white border-gray-200 hover:shadow-md'} backdrop-blur-xl border rounded-lg p-6 transition-all`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4 flex-1">
+                    <MapPin className={`w-6 h-6 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                    <div className="flex items-center gap-3 flex-1">
+                      <span className={`text-xl ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>{item.from}</span>
+                      <ArrowRight className={`w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                      <span className={`text-xl ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>{item.to}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Clock className={`w-4 h-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                    <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>{formatDate(item.timestamp)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
