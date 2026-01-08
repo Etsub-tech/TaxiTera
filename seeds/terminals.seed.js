@@ -23,6 +23,17 @@ const terminals = [
       coordinates: [38.7816, 9.0054],
     },
   },
+  {
+    name: "Mexico Terminal",
+    area: "Mexico",
+    routes: ["Bole", "Piazza", "Saris"],
+    price: 30,
+    location: {
+      type: "Point",
+      coordinates: [38.7403, 9.0609], // 👈 matches your query coords
+    },
+  },
+
 ];
 
 (async () => {
