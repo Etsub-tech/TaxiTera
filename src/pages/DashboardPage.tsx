@@ -19,6 +19,26 @@ import {
 } from 'lucide-react';
 import logoImage from 'figma:asset/5915e0617cff13c3e21f224b1e9a79ae0981b769.png';
 
+export const geocodePlace = async (place: string) => {
+  const res = await fetch(
+    `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(place)}&key=AIzaSyDjEeFnTGD2QZvgmd__SDoDMzD323mwJD0`
+  );
+  const data = await res.json();
+
+  if (!data.results || data.results.length === 0) {
+    throw new Error('Location not found');
+  }
+
+  const location = data.results[0].geometry.location;
+  return {
+    lat: location.lat,
+    lng: location.lng
+  };
+};
+
+
+
+
 const POPULAR_ROUTES = [
   { from: 'Mercato', to: 'Bole', popularity: 'Very Popular' },
   { from: 'Piassa', to: 'Megenagna', popularity: 'Popular' },
@@ -79,7 +99,31 @@ export default function DashboardPage() {
     }
 
     // Navigate to search-results page
-    navigate('/search-results', { state: { from, to, isGuest: false } });
+   const fromCoords = await geocodePlace(from);
+
+const searchResponse = await fetch('https://taxitera-fv1x.onrender.com/api/search', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    latitude: fromCoords.lat,
+    longitude: fromCoords.lng,
+    destination: to
+  }),
+});
+
+const searchResults = await searchResponse.json();
+
+navigate('/search-results', {
+  state: {
+    from,
+    to,
+    fromCoords,
+    results: searchResults,
+    isGuest: false
+  }
+});
+
+
 
   } catch (err: any) {
     console.error('Search error:', err);
@@ -181,7 +225,8 @@ export default function DashboardPage() {
               <div className="relative">
                 <div className="flex items-center gap-2 mb-3">
                   <MapPin className="w-5 h-5 text-blue-400" />
-                  <label className="text-white1">From (Origin)</label>
+                  <label className="text-white">From (Origin)</label>
+
                 </div>
                 <input
                   type="text"
@@ -269,10 +314,35 @@ export default function DashboardPage() {
               {searchHistory.map((item, index) => (
                 <button
                   key={index}
-                  onClick={() => {
-                    setFrom(item.from);
-                    setTo(item.to);
-                  }}
+                  onClick={async () => {
+  setFrom(item.from);
+  setTo(item.to);
+  try {
+    const fromCoords = await geocodePlace(item.from);
+    const searchResponse = await fetch('https://taxitera-fv1x.onrender.com/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        latitude: fromCoords.lat,
+        longitude: fromCoords.lng,
+        destination: item.to
+      }),
+    });
+    const searchResults = await searchResponse.json();
+    navigate('/search-results', {
+      state: {
+        from: item.from,
+        to: item.to,
+        fromCoords,
+        results: searchResults,
+        isGuest: false
+      }
+    });
+  } catch (err) {
+    console.error('Search from history failed:', err);
+  }
+}}
+
                   className={`w-full ${isDarkMode ? 'bg-gray-800/60 hover:bg-gray-800/80 border-blue-400/30' : 'bg-gray-50 hover:bg-gray-100 border-gray-200'} border rounded p-4 text-left transition-colors group`}
                 >
                   <div className="flex items-center justify-between">
@@ -299,7 +369,7 @@ export default function DashboardPage() {
             {POPULAR_ROUTES.map((route, index) => (
               <div
                 key={index}
-                className={`${isDarkMode ? 'pink border-blue-400/30 hover:bg-gray-800/80' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'} border rounded p-5 transition-colors cursor-pointer group`}
+                className={`${isDarkMode ? 'bg-gray-800/60 border-blue-400/30 hover:bg-gray-800/80' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'} border rounded p-5 transition-colors cursor-pointer group`}
                 onClick={() => {
                   setFrom(route.from);
                   setTo(route.to);

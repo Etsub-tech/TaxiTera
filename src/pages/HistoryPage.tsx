@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { Clock, MapPin, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Clock, MapPin, ArrowLeft, ArrowRight, DollarSign } from 'lucide-react';
 import logoImage from 'figma:asset/5915e0617cff13c3e21f224b1e9a79ae0981b769.png';
 
 interface SearchHistoryItem {
   from: string;
   to: string;
   timestamp: number;
+  price?: number;
 }
 
 export default function HistoryPage() {
@@ -39,6 +40,8 @@ export default function HistoryPage() {
         });
         if (!res.ok) throw new Error('Failed to fetch history');
         const data: SearchHistoryItem[] = await res.json();
+        console.log('History data from backend:', data);
+        console.log('First item structure:', data[0]);
         setSearchHistory(data || []);
       } catch (err) {
         console.error('Failed to fetch search history', err);
@@ -96,9 +99,18 @@ export default function HistoryPage() {
                       <span className={`text-xl ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>{item.to}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Clock className={`w-4 h-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-                    <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>{formatDate(item.timestamp)}</span>
+                  <div className="flex flex-col items-end gap-2">
+                    {console.log('Item price:', item.price)}
+                    {item.price && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <DollarSign className={`w-4 h-4 ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`} />
+                        <span className={`${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'} font-medium`}>{item.price} ETB</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 text-sm">
+                      <Clock className={`w-4 h-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                      <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>{formatDate(item.timestamp)}</span>
+                    </div>
                   </div>
                 </div>
               </div>

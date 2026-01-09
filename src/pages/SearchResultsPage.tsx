@@ -21,6 +21,22 @@ interface RouteOption {
   lng?: number;
 }
 
+interface Terminal {
+  name: string;
+  location?: {
+    coordinates: [number, number]; // [lng, lat]
+  };
+  routes?: string[];
+  price?: number;
+}
+
+interface SearchData {
+  userLocation: { lat: number; lng: number };
+  terminals: Terminal[];
+  destination: string;
+  fromName?: string;
+}
+
 export default function SearchResultsPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -30,290 +46,140 @@ export default function SearchResultsPage() {
   const [routes, setRoutes] = useState<RouteOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [debugInfo, setDebugInfo] = useState<{
-    payload?: any;
-    requestUrl?: string;
-    responseStatus?: string;
-    responseBody?: any;
-    geolocationError?: string;
-    geocodeError?: string;
-  } | null>(null);
+  const [searchData, setSearchData] = useState<SearchData | null>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
 
-  const { from, to, isGuest } = location.state || { from: '', to: '', isGuest: false };
-  const [resolvedFrom, setResolvedFrom] = useState<{ latitude: number; longitude: number; name?: string } | null>(
-    typeof from === 'object' && from && 'latitude' in from && 'longitude' in from ? { latitude: from.latitude, longitude: from.longitude, name: (from as any).name } : null
-  );
-
-  // Fetch routes from backend
+  // Read from localStorage on mount
   useEffect(() => {
-    if (!from || !to) return;
-
-    const geocodePlace = async (place: string) => {
-      try {
-        const key = (import.meta as any).env.VITE_GOOGLE_GEOCODE_API_KEY;
-        if (!key) {
-          const msg = 'Google Geocode API key not configured';
-          setDebugInfo((d) => ({ ...(d || {}), geocodeError: msg }));
-          throw new Error(msg);
-        }
-        const res = await fetch(
-          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(place)}&key=${key}`
-        );
-        const d = await res.json().catch(() => null);
-        if (!res.ok) {
-          const bodyText = d ? JSON.stringify(d) : await res.text().catch(() => '');
-          const msg = `Geocode HTTP ${res.status} ${res.statusText} ${bodyText}`;
-          setDebugInfo((cur) => ({ ...(cur || {}), geocodeError: msg }));
-          throw new Error(msg);
-        }
-        if (!d || d.status !== 'OK' || !d.results || d.results.length === 0) {
-          const msg = `No geocoding results: ${d ? JSON.stringify(d) : 'empty response'}`;
-          setDebugInfo((cur) => ({ ...(cur || {}), geocodeError: msg }));
-          throw new Error(msg);
-        }
-        const loc = d.results[0].geometry.location;
-        return { latitude: loc.lat, longitude: loc.lng };
-      } catch (e: any) {
-        console.error('Geocode error:', e.message || e);
-        return null;
-      }
-    };
-
-    const resolveFromAndFetch = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        let coords = resolvedFrom;
-
-        // If resolvedFrom not set, try to resolve
-        if (!coords) {
-          // If `from` is an object with coords use it
-          if (typeof from === 'object' && (from as any).latitude && (from as any).longitude) {
-            coords = { latitude: (from as any).latitude, longitude: (from as any).longitude, name: (from as any).name };
-          } else {
-            // Try browser geolocation first (this will trigger browser permission prompt)
-            if (navigator.geolocation) {
-              try {
-                coords = await new Promise((resolve, reject) => {
-                  navigator.geolocation.getCurrentPosition(
-                    (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
-                    (err) => reject(err),
-                    { enableHighAccuracy: true, timeout: 10000 }
-                  );
-                });
-              } catch (e: any) {
-                const geolMsg = e && e.message ? e.message : 'Geolocation failed or denied';
-                setDebugInfo((cur) => ({ ...(cur || {}), geolocationError: geolMsg }));
-                coords = null as any;
-              }
-            }
-
-            // If still no coords and user typed a `from` string, try Google Geocoding (requires VITE_GOOGLE_GEOCODE_API_KEY)
-            if (!coords && typeof from === 'string') {
-              const g = await geocodePlace(from);
-              if (g) coords = { latitude: g.latitude, longitude: g.longitude, name: from };
-            }
-          }
-        }
-
-        if (!coords) throw new Error('Could not determine origin coordinates. Allow location access or set VITE_GOOGLE_GEOCODE_API_KEY for place-name lookup.');
-
-        setResolvedFrom(coords as any);
-
-        // Send request to backend
-        const requestUrl = 'https://taxitera-fv1x.onrender.com/api/terminals/search';
-        const payload = { latitude: coords.latitude, longitude: coords.longitude, destination: typeof to === 'string' ? to : (to as any).name };
-        // keep request URL for debugging but do not store the full payload anymore
-        setDebugInfo((cur) => ({ ...(cur || {}), requestUrl }));
-
-        const res = await fetch(requestUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        const bodyText = await res.text().catch(() => '');
-        setDebugInfo((cur) => ({ ...(cur || {}), responseStatus: `${res.status} ${res.statusText}`, responseBody: bodyText }));
-
-        if (!res.ok) {
-          throw new Error(`Failed to fetch routes: ${res.status} ${res.statusText} ${bodyText}`);
-        }
-
-        // parse JSON from the bodyText we already captured
-        const raw = bodyText ? JSON.parse(bodyText) : [];
-
-        // If backend returns Terminal-like objects, convert them into RouteOption entries
-        const isTerminalLike = Array.isArray(raw) && raw.length > 0 && (raw[0].name || raw[0].routes);
-
-        if (isTerminalLike) {
-          const getTerminalName = (t: any) => {
-            if (!t) return 'Unknown Terminal';
-            return t.name || t.terminal || t.title || t.displayName || 'Unknown Terminal';
-          };
-          const toLatLng = (coordsArr: any[]) => ({ lat: Number(coordsArr[1]), lon: Number(coordsArr[0]) });
-          const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-            const toRad = (v: number) => (v * Math.PI) / 180;
-            const R = 6371; // km
-            const dLat = toRad(lat2 - lat1);
-            const dLon = toRad(lon2 - lon1);
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c;
-          };
-
-          const terminals = raw as any[];
-          const userLat = coords.latitude;
-          const userLon = coords.longitude;
-
-          // Sort by distance
-          const terminalsWithDist = terminals.map((t, idx) => {
-            const loc = t.location && Array.isArray(t.location.coordinates) ? toLatLng(t.location.coordinates) : { lat: 0, lon: 0 };
-            const dist = haversineKm(userLat, userLon, loc.lat, loc.lon);
-            return { t, dist, idx, loc };
-          }).sort((a,b) => a.dist - b.dist);
-
-          const generated: RouteOption[] = [];
-
-          if (terminalsWithDist.length > 0) {
-            const first = terminalsWithDist[0];
-            generated.push({
-              id: 1,
-              type: 'Best Route',
-              optionNumber: 1,
-              terminal: getTerminalName(first.t),
-              stops: Array.isArray(first.t.routes) ? first.t.routes : [],
-              duration: `${Math.max(5, Math.round(first.dist * 3))}-${Math.max(6, Math.round(first.dist * 4))} min`,
-              distance: `${first.dist.toFixed(1)} km`,
-              estimatedMoney: first.t.price ? `${first.t.price} ETB` : '—',
-              lat: first.loc.lat,
-              lng: first.loc.lon,
-            });
-          }
-
-          if (terminalsWithDist.length > 0) {
-            const nearest = terminalsWithDist[0];
-            generated.push({
-              id: 2,
-              type: 'Nearest Terminal',
-              optionNumber: 2,
-              terminal: getTerminalName(nearest.t),
-              stops: Array.isArray(nearest.t.routes) ? nearest.t.routes : [],
-              duration: `${Math.max(5, Math.round(nearest.dist * 3))}-${Math.max(6, Math.round(nearest.dist * 4))} min`,
-              distance: `${nearest.dist.toFixed(1)} km`,
-              estimatedMoney: nearest.t.price ? `${nearest.t.price} ETB` : '—',
-              lat: nearest.loc.lat,
-              lng: nearest.loc.lon,
-            });
-          }
-
-          if (terminalsWithDist.length > 1) {
-            const second = terminalsWithDist[1];
-            generated.push({
-              id: 3,
-              type: 'Fastest Route',
-              optionNumber: 3,
-              terminal: getTerminalName(second.t),
-              stops: Array.isArray(second.t.routes) ? second.t.routes : [],
-              duration: `${Math.max(5, Math.round(second.dist * 2))}-${Math.max(6, Math.round(second.dist * 3))} min`,
-              distance: `${second.dist.toFixed(1)} km`,
-              estimatedMoney: second.t.price ? `${second.t.price} ETB` : '—',
-              lat: second.loc.lat,
-              lng: second.loc.lon,
-            });
-          }
-
-          setRoutes(generated);
+    try {
+      const stored = localStorage.getItem('searchData');
+      if (stored) {
+        const parsed: SearchData = JSON.parse(stored);
+        setSearchData(parsed);
+      } else {
+        // Fallback to navigation state for backward compatibility
+        const navState = location.state || {};
+        if (navState.from && navState.to) {
+          // Convert old format to new format if needed
+          setSearchData({
+            userLocation: navState.fromCoords || { lat: 0, lng: 0 },
+            terminals: navState.results || [],
+            destination: navState.to,
+            fromName: navState.from
+          });
         } else {
-          const data: RouteOption[] = raw as any;
-          setRoutes(data);
+          setError('No search data found. Please search again.');
         }
-      } catch (err: any) {
-        setError(err.message || String(err));
-        console.error('SearchResults error details:', debugInfo, err);
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (err) {
+      console.error('Failed to read search data:', err);
+      setError('Failed to load search data. Please search again.');
+    }
+  }, [location.state]);
 
-    resolveFromAndFetch();
-  }, [from, to]);
+  // Process terminals from localStorage into routes
+  useEffect(() => {
+    if (!searchData || !searchData.terminals || searchData.terminals.length === 0) {
+      setRoutes([]);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const getTerminalName = (t: Terminal) => {
+        if (!t) return 'Unknown Terminal';
+        return t.name || 'Unknown Terminal';
+      };
+
+      const toLatLng = (coordsArr: [number, number]) => ({ 
+        lat: Number(coordsArr[1]), 
+        lon: Number(coordsArr[0]) 
+      });
+
+      const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+        const toRad = (v: number) => (v * Math.PI) / 180;
+        const R = 6371; // km
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) + 
+                  Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * 
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+      };
+
+      const terminals = searchData.terminals;
+      const userLat = searchData.userLocation.lat;
+      const userLon = searchData.userLocation.lng;
+
+      // Sort by distance
+      const terminalsWithDist = terminals.map((t, idx) => {
+        const loc = t.location && Array.isArray(t.location.coordinates) 
+          ? toLatLng(t.location.coordinates) 
+          : { lat: 0, lon: 0 };
+        const dist = haversineKm(userLat, userLon, loc.lat, loc.lon);
+        return { t, dist, idx, loc };
+      }).sort((a, b) => a.dist - b.dist);
+
+      const generated: RouteOption[] = [];
+
+      if (terminalsWithDist.length > 0) {
+        const first = terminalsWithDist[0];
+        generated.push({
+          id: 1,
+          type: 'Best Route',
+          optionNumber: 1,
+          terminal: getTerminalName(first.t),
+          stops: Array.isArray(first.t.routes) ? first.t.routes : [],
+          duration: `${Math.max(5, Math.round(first.dist * 3))}-${Math.max(6, Math.round(first.dist * 4))} min`,
+          distance: `${first.dist.toFixed(1)} km`,
+          estimatedMoney: first.t.price ? `${first.t.price} ETB` : '—',
+          lat: first.loc.lat,
+          lng: first.loc.lon,
+        });
+      }
+
+      if (terminalsWithDist.length > 0) {
+        const nearest = terminalsWithDist[0];
+        generated.push({
+          id: 2,
+          type: 'Nearest Terminal',
+          optionNumber: 2,
+          terminal: getTerminalName(nearest.t),
+          stops: Array.isArray(nearest.t.routes) ? nearest.t.routes : [],
+          duration: `${Math.max(5, Math.round(nearest.dist * 3))}-${Math.max(6, Math.round(nearest.dist * 4))} min`,
+          distance: `${nearest.dist.toFixed(1)} km`,
+          estimatedMoney: nearest.t.price ? `${nearest.t.price} ETB` : '—',
+          lat: nearest.loc.lat,
+          lng: nearest.loc.lon,
+        });
+      }
+
+      if (terminalsWithDist.length > 1) {
+        const second = terminalsWithDist[1];
+        generated.push({
+          id: 3,
+          type: 'Fastest Route',
+          optionNumber: 3,
+          terminal: getTerminalName(second.t),
+          stops: Array.isArray(second.t.routes) ? second.t.routes : [],
+          duration: `${Math.max(5, Math.round(second.dist * 2))}-${Math.max(6, Math.round(second.dist * 3))} min`,
+          distance: `${second.dist.toFixed(1)} km`,
+          estimatedMoney: second.t.price ? `${second.t.price} ETB` : '—',
+          lat: second.loc.lat,
+          lng: second.loc.lon,
+        });
+      }
+
+      setRoutes(generated);
+    } catch (err: any) {
+      setError(err.message || String(err));
+      console.error('Error processing terminals:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [searchData]);
   
-  // allow manual re-fetch when clicking "Welcome, <user>"
-  useEffect(() => {
-    if (fetchTrigger <= 0) return;
-    if (!from || !to) return;
-    // trigger the same effect by calling the same resolver via a synthetic update
-    // changing fetchTrigger will re-run the main useEffect because we will include it there
-    // simpler: call resolveFromAndFetch by creating and invoking the same logic here
-    (async () => {
-      try {
-        // reuse the existing effect by toggling resolvedFrom to null to force geolocation/geocode path
-        // but easiest is to call the original POST again using the same payload logic
-        // We replicate minimal logic: try to get coords from resolvedFrom or from object
-        let coords = resolvedFrom as any;
-        if (!coords) {
-          if (typeof from === 'object' && (from as any).latitude && (from as any).longitude) {
-            coords = { latitude: (from as any).latitude, longitude: (from as any).longitude, name: (from as any).name };
-          } else {
-            // do nothing; the main effect already handles geolocation/geocoding
-            return;
-          }
-        }
-
-        const requestUrl = 'https://taxitera-fv1x.onrender.com/api/terminals/search';
-        const payload = { latitude: coords.latitude, longitude: coords.longitude, destination: typeof to === 'string' ? to : (to as any).name };
-        const res = await fetch(requestUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const bodyText = await res.text().catch(() => '');
-        if (!res.ok) throw new Error(`Failed to fetch routes: ${res.status} ${res.statusText} ${bodyText}`);
-        const raw = bodyText ? JSON.parse(bodyText) : [];
-        const isTerminalLike = Array.isArray(raw) && raw.length > 0 && (raw[0].name || raw[0].routes);
-        if (isTerminalLike) {
-          const toLatLng = (coordsArr: any[]) => ({ lat: Number(coordsArr[1]), lon: Number(coordsArr[0]) });
-          const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-            const toRad = (v: number) => (v * Math.PI) / 180;
-            const R = 6371; // km
-            const dLat = toRad(lat2 - lat1);
-            const dLon = toRad(lon2 - lon1);
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c;
-          };
-          const terminals = raw as any[];
-          const userLat = coords.latitude;
-          const userLon = coords.longitude;
-          const terminalsWithDist = terminals.map((t, idx) => {
-            const loc = t.location && Array.isArray(t.location.coordinates) ? toLatLng(t.location.coordinates) : { lat: 0, lon: 0 };
-            const dist = haversineKm(userLat, userLon, loc.lat, loc.lon);
-            return { t, dist, idx, loc };
-          }).sort((a,b) => a.dist - b.dist);
-          const generated: RouteOption[] = [];
-          const getTerminalName = (t: any) => t?.name || t?.terminal || t?.title || t?.displayName || 'Unknown Terminal';
-          if (terminalsWithDist.length > 0) {
-            const first = terminalsWithDist[0];
-            generated.push({ id: 1, type: 'Best Route', optionNumber: 1, terminal: getTerminalName(first.t), stops: Array.isArray(first.t.routes) ? first.t.routes : [], duration: `${Math.max(5, Math.round(first.dist * 3))}-${Math.max(6, Math.round(first.dist * 4))} min`, distance: `${first.dist.toFixed(1)} km`, estimatedMoney: first.t.price ? `${first.t.price} ETB` : '—', lat: first.loc.lat, lng: first.loc.lon });
-          }
-          if (terminalsWithDist.length > 0) {
-            const nearest = terminalsWithDist[0];
-            generated.push({ id: 2, type: 'Nearest Terminal', optionNumber: 2, terminal: getTerminalName(nearest.t), stops: Array.isArray(nearest.t.routes) ? nearest.t.routes : [], duration: `${Math.max(5, Math.round(nearest.dist * 3))}-${Math.max(6, Math.round(nearest.dist * 4))} min`, distance: `${nearest.dist.toFixed(1)} km`, estimatedMoney: nearest.t.price ? `${nearest.t.price} ETB` : '—', lat: nearest.loc.lat, lng: nearest.loc.lon });
-          }
-          if (terminalsWithDist.length > 1) {
-            const second = terminalsWithDist[1];
-            generated.push({ id: 3, type: 'Fastest Route', optionNumber: 3, terminal: getTerminalName(second.t), stops: Array.isArray(second.t.routes) ? second.t.routes : [], duration: `${Math.max(5, Math.round(second.dist * 2))}-${Math.max(6, Math.round(second.dist * 3))} min`, distance: `${second.dist.toFixed(1)} km`, estimatedMoney: second.t.price ? `${second.t.price} ETB` : '—', lat: second.loc.lat, lng: second.loc.lon });
-          }
-          setRoutes(generated);
-        } else {
-          setRoutes(raw as any);
-        }
-      } catch (e) {
-        console.error('Manual fetch failed', e);
-      }
-    })();
-  }, [fetchTrigger]);
 
   const handleLogout = () => {
     logout();
@@ -322,10 +188,13 @@ export default function SearchResultsPage() {
   };
 
   const handleRouteClick = async (route: RouteOption) => {
-    console.log('handleRouteClick called with route:', route);
-    console.log('Route coordinates:', { lat: route.lat, lng: route.lng });
-    
-    if (user && !isGuest) {
+    if (!searchData) {
+      console.error('No search data available');
+      return;
+    }
+
+    // Save history if user is logged in
+    if (user) {
       try {
         const token = localStorage.getItem('token');
         await fetch('https://taxitera-fv1x.onrender.com/api/history', {
@@ -334,69 +203,37 @@ export default function SearchResultsPage() {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ from: typeof from === 'string' ? from : (from as any).name, to: typeof to === 'string' ? to : (to as any).name }),
+          body: JSON.stringify({ 
+            from: searchData.fromName || 'Current Location', 
+            to: searchData.destination,
+            price: route.estimatedMoney 
+          }),
         });
-        try { addSearchHistory(typeof from === 'string' ? from : (from as any).name, typeof to === 'string' ? to : (to as any).name); } catch (e) {}
+        try { 
+          addSearchHistory(searchData.fromName || 'Current Location', searchData.destination); 
+        } catch (e) {
+          console.error('Failed to add search history', e);
+        }
       } catch (e) {
         console.error('Failed to save history', e);
       }
     }
 
-    // Ensure we have coordinates before navigating
-    let fromCoords = resolvedFrom;
-    
-    // If no resolved coordinates, try to get them
-    if (!fromCoords) {
-      try {
-        // Try browser geolocation first
-        if (navigator.geolocation) {
-          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 });
-          });
-          fromCoords = { latitude: position.coords.latitude, longitude: position.coords.longitude };
-        }
-      } catch (e) {
-        console.error('Could not get user location:', e);
-        // Continue without coordinates - MapPage will handle this case
-      }
-    }
-
-    console.log('Navigating to map with:', { 
-      routeId: route.id, 
-      routeType: route.type,
-      routeTerminal: route.terminal,
-      routeCoords: { lat: route.lat, lng: route.lng },
-      fromCoords, 
-      from, 
-      to, 
-      isGuest 
-    });
-
-    // Save the selected route and context to localStorage so MapPage can load it
+    // Save map data to localStorage
     try {
-      const payloadForMap = { 
-        route, 
-        from: typeof from === 'string' ? from : (from as any).name, 
-        to: typeof to === 'string' ? to : (to as any).name, 
-        isGuest,
-        fromCoords
+      const mapData = {
+        userLocation: searchData.userLocation,
+        terminalLocation: { lat: route.lat || 0, lng: route.lng || 0 },
+        destination: searchData.destination,
+        route: route,
+        fromName: searchData.fromName || 'Current Location'
       };
-      console.log('Saving to localStorage:', payloadForMap);
-      localStorage.setItem('lastRoute', JSON.stringify(payloadForMap));
+      localStorage.setItem('mapData', JSON.stringify(mapData));
     } catch (e) {
-      console.error('Failed to save lastRoute to localStorage', e);
+      console.error('Failed to save map data to localStorage', e);
     }
 
-    const navigationState = { 
-      route, 
-      from: fromCoords || from, 
-      to, 
-      isGuest,
-      fromCoords
-    };
-    console.log('Navigation state:', navigationState);
-
-    navigate('/map', { state: navigationState });
+    navigate('/map');
   };
 
   return (
@@ -415,7 +252,7 @@ export default function SearchResultsPage() {
               {isDarkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-blue-600" />}
             </button>
 
-            {user && !isGuest ? (
+            {user ? (
               <div className="relative">
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
@@ -454,15 +291,17 @@ export default function SearchResultsPage() {
 
       <div className="max-w-6xl mx-auto px-6 py-8">
         <h1 className={`text-3xl mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Available Routes</h1>
-        {user && !isGuest && (
-          <button onClick={() => setFetchTrigger((s) => s + 1)} className={`mb-4 inline-block ${isDarkMode ? 'text-gray-200' : 'text-gray-700'} hover:underline`}>Welcome, {localStorage.getItem('username') || user.username}</button>
+        {user && (
+          <p className={`mb-4 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Welcome, {localStorage.getItem('username') || user.username}</p>
         )}
-        <div className={`flex items-center gap-3 mb-6 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-          <MapPin className={`w-6 h-6 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-          <span className="text-xl">{from}</span>
-          <ArrowRight className={`w-5 h-5 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-          <span className="text-xl">{to}</span>
-        </div>
+        {searchData && (
+          <div className={`flex items-center gap-3 mb-6 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+            <MapPin className={`w-6 h-6 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+            <span className="text-xl">{searchData.fromName || 'Current Location'}</span>
+            <ArrowRight className={`w-5 h-5 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+            <span className="text-xl">{searchData.destination}</span>
+          </div>
+        )}
 
         {loading && <p className={isDarkMode ? 'text-white' : 'text-gray-800'}>Loading routes...</p>}
         {error && <p className="text-red-500 mb-4">{error}</p>}
@@ -484,17 +323,19 @@ export default function SearchResultsPage() {
               </div>
 
               <div className="p-6">
-                <div className={`flex items-center justify-between mb-6 ${isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'} rounded-lg p-4`}>
-                  <div>
-                    <p className={`text-sm mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>From</p>
-                    <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{from}</p>
+                {searchData && (
+                  <div className={`flex items-center justify-between mb-6 ${isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'} rounded-lg p-4`}>
+                    <div>
+                      <p className={`text-sm mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>From</p>
+                      <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{searchData.fromName || 'Current Location'}</p>
+                    </div>
+                    <ArrowRight className={`w-6 h-6 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                    <div className="text-right">
+                      <p className={`text-sm mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>To</p>
+                      <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{searchData.destination}</p>
+                    </div>
                   </div>
-                  <ArrowRight className={`w-6 h-6 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-                  <div className="text-right">
-                    <p className={`text-sm mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>To</p>
-                    <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{to}</p>
-                  </div>
-                </div>
+                )}
 
                 <div className="mb-6">
                   <div className="flex items-center gap-2 mb-2">
@@ -517,7 +358,7 @@ export default function SearchResultsPage() {
                   </div>
                 )}
 
-                <div className={`grid ${user && !isGuest ? 'grid-cols-3' : 'grid-cols-2'} gap-4 mb-6`}>
+                <div className={`grid ${user ? 'grid-cols-3' : 'grid-cols-2'} gap-4 mb-6`}>
                   <div className={`${isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'} rounded-lg p-4`}>
                     <div className="flex items-center gap-2 mb-2">
                       <Clock className={`w-4 h-4 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
@@ -532,7 +373,7 @@ export default function SearchResultsPage() {
                     </div>
                     <p className={isDarkMode ? 'text-white' : 'text-gray-900'}>{route.distance}</p>
                   </div>
-                  {user && !isGuest && (
+                  {user && (
                     <div className={`${isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'} rounded-lg p-4`}>
                       <div className="flex items-center gap-2 mb-2">
                         <DollarSign className={`w-4 h-4 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />

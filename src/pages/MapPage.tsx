@@ -18,8 +18,15 @@ interface RouteOption {
   estimatedMoney: string;
 }
 
+interface MapData {
+  userLocation: { lat: number; lng: number };
+  terminalLocation: { lat: number; lng: number };
+  destination: string;
+  route?: RouteOption;
+  fromName?: string;
+}
+
 export default function MapPage() {
-  console.log('MapPage component rendering');
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -28,47 +35,73 @@ export default function MapPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [locationPermission, setLocationPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
-  const [route, setRoute] = useState<any>(null);
+  const [mapData, setMapData] = useState<MapData | null>(null);
+  const [route, setRoute] = useState<RouteOption | null>(null);
 
-  // Defensive check for missing navigation state at the top
-  const navState = location.state || {};
-  console.log('MapPage - navState:', navState);
-  
+  // Read map data from localStorage
   useEffect(() => {
-    console.log('MapPage useEffect triggered with navState:', navState);
-    
-    // Process navigation state if route is available
-    if (navState.route) {
-      console.log('MapPage - Found route in navState, setting route:', navState.route);
-      setRoute({ ...navState.route, from: navState.from, to: navState.to, isGuest: navState.isGuest, fromCoords: navState.fromCoords });
-      return;
-    }
-
-    // Try localStorage fallback
     try {
-      const raw = localStorage.getItem('lastRoute');
-      console.log('MapPage - localStorage raw:', raw);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        console.log('MapPage - localStorage parsed:', parsed);
+      const stored = localStorage.getItem('mapData');
+      if (stored) {
+        const parsed: MapData = JSON.parse(stored);
+        setMapData(parsed);
         if (parsed.route) {
-          console.log('MapPage - Found route in localStorage, setting route:', parsed.route);
-          setRoute({ ...parsed.route, from: parsed.from, to: parsed.to, isGuest: parsed.isGuest, fromCoords: parsed.fromCoords });
-          return;
+          setRoute(parsed.route);
+        }
+        // Use stored user location
+        if (parsed.userLocation) {
+          setUserLocation(parsed.userLocation);
+          setLocationPermission('granted');
+        }
+      } else {
+        // Fallback to navigation state for backward compatibility
+        const navState = location.state || {};
+        if (navState.route) {
+          setRoute(navState.route);
+          if (navState.fromCoords) {
+            setUserLocation({ lat: navState.fromCoords.latitude, lng: navState.fromCoords.longitude });
+            setLocationPermission('granted');
+          }
+          // Create mapData from navState
+          setMapData({
+            userLocation: navState.fromCoords ? { lat: navState.fromCoords.latitude, lng: navState.fromCoords.longitude } : { lat: 0, lng: 0 },
+            terminalLocation: navState.route.lat && navState.route.lng ? { lat: navState.route.lat, lng: navState.route.lng } : { lat: 0, lng: 0 },
+            destination: navState.to || '',
+            route: navState.route,
+            fromName: navState.from
+          });
+        } else {
+          // Try old localStorage key for backward compatibility
+          const oldRoute = localStorage.getItem('lastRoute');
+          if (oldRoute) {
+            const parsed = JSON.parse(oldRoute);
+            if (parsed.route) {
+              setRoute(parsed.route);
+              if (parsed.fromCoords) {
+                setUserLocation({ lat: parsed.fromCoords.latitude, lng: parsed.fromCoords.longitude });
+                setLocationPermission('granted');
+              }
+              setMapData({
+                userLocation: parsed.fromCoords ? { lat: parsed.fromCoords.latitude, lng: parsed.fromCoords.longitude } : { lat: 0, lng: 0 },
+                terminalLocation: parsed.route.lat && parsed.route.lng ? { lat: parsed.route.lat, lng: parsed.route.lng } : { lat: 0, lng: 0 },
+                destination: parsed.to || '',
+                route: parsed.route,
+                fromName: parsed.from
+              });
+            }
+          }
         }
       }
     } catch (e) {
-      console.error('Failed to read lastRoute from localStorage', e);
+      console.error('Failed to read map data from localStorage', e);
     }
-    
-    // If still no route data, show error instead of crashing
-    // This will only be reached if no route data is found in navigation state or localStorage
-    console.log('MapPage - No route data found, will show error');
   }, [location.state]);
 
-  // Request user location
+  // Request user location only if not already set from localStorage
   useEffect(() => {
-    requestUserLocation();
+    if (!userLocation && locationPermission !== 'granted') {
+      requestUserLocation();
+    }
   }, []);
 
   const requestUserLocation = () => {
@@ -87,7 +120,12 @@ export default function MapPage() {
         setUserLocation({ lat: latitude, lng: longitude });
         setLocationPermission('granted');
         setLocationError(null);
-        toast.success(`Location accessed: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+        // Update mapData with new location
+        if (mapData) {
+          const updated = { ...mapData, userLocation: { lat: latitude, lng: longitude } };
+          setMapData(updated);
+          localStorage.setItem('mapData', JSON.stringify(updated));
+        }
       },
       (error) => {
         setLocationPermission('denied');
@@ -125,8 +163,7 @@ export default function MapPage() {
   };
 
   // Show friendly error message if no route data is available
-  if (!route) {
-    console.log('MapPage - No route, showing error screen');
+  if (!route || !mapData) {
     return (
       <div className={`min-h-screen ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
         {/* Header */}
@@ -189,14 +226,15 @@ export default function MapPage() {
     );
   }
 
-  console.log('MapPage - Has route, rendering map content');
-
   // Build iframe src
-  const mapSrc = userLocation && route.lat && route.lng
-    ? `https://www.google.com/maps/embed/v1/directions?key=AIzaSyDfW7TSwgImAK2ZtpKAa45LKH1mufZqFOw&origin=${userLocation.lat},${userLocation.lng}&destination=${route.lat},${route.lng}&mode=driving`
-    : route.lat && route.lng
-      ? `https://www.google.com/maps/embed/v1/view?key=AIzaSyDfW7TSwgImAK2ZtpKAa45LKH1mufZqFOw&center=${route.lat},${route.lng}&zoom=15&maptype=roadmap`
-      : `https://www.google.com/maps/embed/v1/place?key=AIzaSyDfW7TSwgImAK2ZtpKAa45LKH1mufZqFOw&q=${encodeURIComponent(route.terminal || route.to || 'Addis Ababa')}&zoom=13`;
+  const terminalLoc = mapData.terminalLocation;
+  const userLoc = userLocation || mapData.userLocation;
+  
+  const mapSrc = userLoc && terminalLoc.lat && terminalLoc.lng
+    ? `https://www.google.com/maps/embed/v1/directions?key=AIzaSyDfW7TSwgImAK2ZtpKAa45LKH1mufZqFOw&origin=${userLoc.lat},${userLoc.lng}&destination=${terminalLoc.lat},${terminalLoc.lng}&mode=driving`
+    : terminalLoc.lat && terminalLoc.lng
+      ? `https://www.google.com/maps/embed/v1/view?key=AIzaSyDfW7TSwgImAK2ZtpKAa45LKH1mufZqFOw&center=${terminalLoc.lat},${terminalLoc.lng}&zoom=15&maptype=roadmap`
+      : `https://www.google.com/maps/embed/v1/place?key=AIzaSyDfW7TSwgImAK2ZtpKAa45LKH1mufZqFOw&q=${encodeURIComponent(route.terminal || mapData.destination || 'Addis Ababa')}&zoom=13`;
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
@@ -208,7 +246,7 @@ export default function MapPage() {
             <button onClick={toggleTheme} className={`p-2 rounded-full ${isDarkMode ? 'bg-white/10 hover:bg-white/20' : 'bg-gray-800/10 hover:bg-gray-800/20'}`}>
               {isDarkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-blue-600" />}
             </button>
-            {user && !route?.isGuest ? (
+            {user ? (
               <div className="relative">
                 <button onClick={() => setProfileMenuOpen(!profileMenuOpen)} className={`flex items-center gap-2 px-4 py-2 rounded ${isDarkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-700 hover:bg-blue-800'} text-white`}>
                   <User className="w-5 h-5" /><span>{user.username}</span><ChevronDown className="w-4 h-4" />
@@ -233,7 +271,7 @@ export default function MapPage() {
 
       <div className="max-w-6xl mx-auto px-6 py-8">
         <h1 className={`text-3xl mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-          {route.type || 'Route'}: {typeof route.from === 'string' ? route.from : (route.from?.name || 'Origin')} → {typeof route.to === 'string' ? route.to : (route.to?.name || route.terminal || 'Destination')}
+          {route.type || 'Route'}: {mapData.fromName || 'Current Location'} → {mapData.destination}
         </h1>
 
         {/* Location Status Banners */}
@@ -244,12 +282,12 @@ export default function MapPage() {
           </div>
         )}
 
-        {locationPermission === 'granted' && userLocation && (
+        {locationPermission === 'granted' && userLoc && (
           <div className={`mb-6 p-4 ${isDarkMode ? 'bg-green-500/10 border-green-400/40' : 'bg-green-50 border-green-200'} border rounded-lg flex items-center gap-3`}>
             <MapPinned className="w-5 h-5 text-green-400" />
             <div>
               <p className={isDarkMode ? 'text-green-300' : 'text-green-700'}>Location access granted</p>
-              <p className={`text-sm ${isDarkMode ? 'text-green-400/70' : 'text-green-600/70'}`}>Latitude: {userLocation.lat.toFixed(4)}, Longitude: {userLocation.lng.toFixed(4)}</p>
+              <p className={`text-sm ${isDarkMode ? 'text-green-400/70' : 'text-green-600/70'}`}>Latitude: {userLoc.lat.toFixed(4)}, Longitude: {userLoc.lng.toFixed(4)}</p>
             </div>
           </div>
         )}
@@ -285,7 +323,7 @@ export default function MapPage() {
               <div className="flex items-center gap-3 mb-3"><MapPin className="w-6 h-6 text-blue-400" /><h3 className={`text-xl ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Distance</h3></div>
               <p className="text-3xl text-blue-300">{route.distance || '—'}</p>
             </div>
-            {user && !route?.isGuest && (
+            {user && (
               <div className={`${isDarkMode ? 'bg-gray-800/60 border-blue-400/30' : 'bg-gray-50 border-gray-200'} border rounded-lg p-6`}>
                 <div className="flex items-center gap-3 mb-3"><DollarSign className="w-6 h-6 text-yellow-400" /><h3 className={`text-xl ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Estimated Money</h3></div>
                 <p className="text-3xl text-yellow-300">{route.estimatedMoney || 'N/A'}</p>
@@ -298,7 +336,7 @@ export default function MapPage() {
             <h3 className={`text-2xl mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Route Information</h3>
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-2"><MapPin className={`w-5 h-5 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} /><span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Terminal</span></div>
-              <p className={`text-xl ml-7 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{route.terminal || route.name || route.to}</p>
+              <p className={`text-xl ml-7 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{route.terminal || mapData.destination}</p>
             </div>
 
             {/* Stops */}
