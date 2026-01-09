@@ -60,41 +60,54 @@ export default function DashboardPage() {
 
 
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!from || !to) return;
+ const handleSearch = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!from || !to) return;
 
-    setLoading(true);
-
-    try {
-      // Optional: get user coordinates
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject);
-      });
-
-      const latitude = position.coords.latitude;
-      const longitude = position.coords.longitude;
-
-      const res = await fetch('https://taxitera-fv1x.onrender.com/api/terminals/search', {
+  try {
+    // Save route to backend if user is logged in
+    if (user) {
+      const token = localStorage.getItem('token');
+      await fetch('https://taxitera-fv1x.onrender.com/api/history', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ latitude, longitude, destination: to }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ from, to }),
       });
-
-      if (!res.ok) throw new Error('Failed to search terminals');
-
-      const terminals = await res.json(); // Array of terminals
-      console.log('Search results:', terminals);
-
-      // Navigate to map or search results page with data
-      navigate('/map', { state: { from, to, terminals } });
-
-    } catch (err: any) {
-      console.error(err);
-    } finally {
-      setLoading(false);
     }
-  };
+
+    // Get user's location
+    const position = await new Promise<GeolocationPosition>((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(resolve, reject)
+    );
+    const latitude = position.coords.latitude;
+    const longitude = position.coords.longitude;
+
+    // Call backend to search terminals
+    const res = await fetch('https://taxitera-fv1x.onrender.com/api/terminals/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ latitude, longitude, destination: to }),
+    });
+
+    if (!res.ok) throw new Error('Failed to search terminals');
+
+    const terminals = await res.json(); // terminals already contain price
+
+    console.log('Terminals fetched:', terminals); // check in console
+
+    // Navigate to /map with terminals data
+    navigate('/map', { state: { from, to, terminals } });
+
+  } catch (err: any) {
+    console.error('Search error:', err);
+  }
+};
+
+
+
 
 
   const handleLogout = () => {

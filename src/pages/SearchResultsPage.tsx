@@ -17,6 +17,8 @@ interface RouteOption {
   duration: string;
   distance: string;
   estimatedMoney: string;
+  lat?: number;
+  lng?: number;
 }
 
 export default function SearchResultsPage() {
@@ -184,6 +186,8 @@ export default function SearchResultsPage() {
               duration: `${Math.max(5, Math.round(first.dist * 3))}-${Math.max(6, Math.round(first.dist * 4))} min`,
               distance: `${first.dist.toFixed(1)} km`,
               estimatedMoney: first.t.price ? `${first.t.price} ETB` : '—',
+              lat: first.loc.lat,
+              lng: first.loc.lon,
             });
           }
 
@@ -198,6 +202,8 @@ export default function SearchResultsPage() {
               duration: `${Math.max(5, Math.round(nearest.dist * 3))}-${Math.max(6, Math.round(nearest.dist * 4))} min`,
               distance: `${nearest.dist.toFixed(1)} km`,
               estimatedMoney: nearest.t.price ? `${nearest.t.price} ETB` : '—',
+              lat: nearest.loc.lat,
+              lng: nearest.loc.lon,
             });
           }
 
@@ -212,6 +218,8 @@ export default function SearchResultsPage() {
               duration: `${Math.max(5, Math.round(second.dist * 2))}-${Math.max(6, Math.round(second.dist * 3))} min`,
               distance: `${second.dist.toFixed(1)} km`,
               estimatedMoney: second.t.price ? `${second.t.price} ETB` : '—',
+              lat: second.loc.lat,
+              lng: second.loc.lon,
             });
           }
 
@@ -287,15 +295,15 @@ export default function SearchResultsPage() {
           const getTerminalName = (t: any) => t?.name || t?.terminal || t?.title || t?.displayName || 'Unknown Terminal';
           if (terminalsWithDist.length > 0) {
             const first = terminalsWithDist[0];
-            generated.push({ id: 1, type: 'Best Route', optionNumber: 1, terminal: getTerminalName(first.t), stops: Array.isArray(first.t.routes) ? first.t.routes : [], duration: `${Math.max(5, Math.round(first.dist * 3))}-${Math.max(6, Math.round(first.dist * 4))} min`, distance: `${first.dist.toFixed(1)} km`, estimatedMoney: first.t.price ? `${first.t.price} ETB` : '—' });
+            generated.push({ id: 1, type: 'Best Route', optionNumber: 1, terminal: getTerminalName(first.t), stops: Array.isArray(first.t.routes) ? first.t.routes : [], duration: `${Math.max(5, Math.round(first.dist * 3))}-${Math.max(6, Math.round(first.dist * 4))} min`, distance: `${first.dist.toFixed(1)} km`, estimatedMoney: first.t.price ? `${first.t.price} ETB` : '—', lat: first.loc.lat, lng: first.loc.lon });
           }
           if (terminalsWithDist.length > 0) {
             const nearest = terminalsWithDist[0];
-            generated.push({ id: 2, type: 'Nearest Terminal', optionNumber: 2, terminal: getTerminalName(nearest.t), stops: Array.isArray(nearest.t.routes) ? nearest.t.routes : [], duration: `${Math.max(5, Math.round(nearest.dist * 3))}-${Math.max(6, Math.round(nearest.dist * 4))} min`, distance: `${nearest.dist.toFixed(1)} km`, estimatedMoney: nearest.t.price ? `${nearest.t.price} ETB` : '—' });
+            generated.push({ id: 2, type: 'Nearest Terminal', optionNumber: 2, terminal: getTerminalName(nearest.t), stops: Array.isArray(nearest.t.routes) ? nearest.t.routes : [], duration: `${Math.max(5, Math.round(nearest.dist * 3))}-${Math.max(6, Math.round(nearest.dist * 4))} min`, distance: `${nearest.dist.toFixed(1)} km`, estimatedMoney: nearest.t.price ? `${nearest.t.price} ETB` : '—', lat: nearest.loc.lat, lng: nearest.loc.lon });
           }
           if (terminalsWithDist.length > 1) {
             const second = terminalsWithDist[1];
-            generated.push({ id: 3, type: 'Fastest Route', optionNumber: 3, terminal: getTerminalName(second.t), stops: Array.isArray(second.t.routes) ? second.t.routes : [], duration: `${Math.max(5, Math.round(second.dist * 2))}-${Math.max(6, Math.round(second.dist * 3))} min`, distance: `${second.dist.toFixed(1)} km`, estimatedMoney: second.t.price ? `${second.t.price} ETB` : '—' });
+            generated.push({ id: 3, type: 'Fastest Route', optionNumber: 3, terminal: getTerminalName(second.t), stops: Array.isArray(second.t.routes) ? second.t.routes : [], duration: `${Math.max(5, Math.round(second.dist * 2))}-${Math.max(6, Math.round(second.dist * 3))} min`, distance: `${second.dist.toFixed(1)} km`, estimatedMoney: second.t.price ? `${second.t.price} ETB` : '—', lat: second.loc.lat, lng: second.loc.lon });
           }
           setRoutes(generated);
         } else {

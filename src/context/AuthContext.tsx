@@ -37,6 +37,7 @@ interface AuthContextType {
   getUserSecurityQuestions: (username: string) => SecurityQuestion[] | null;
   verifySecurityAnswers: (username: string, answers: SecurityAnswer[]) => boolean;
   resetPassword: (username: string, newPassword: string) => boolean;
+  setUserFromLocalStorage: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -52,7 +53,14 @@ const SECURITY_QUESTIONS: SecurityQuestion[] = [
 ];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const u = localStorage.getItem('username');
+      return u ? { username: u } : null;
+    } catch (e) {
+      return null;
+    }
+  });
   const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([]);
   const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([]);
 
@@ -82,6 +90,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setUser(null);
     setSearchHistory([]);
+    try {
+      localStorage.removeItem('token');
+      localStorage.removeItem('username');
+    } catch (e) {}
+  };
+
+  const setUserFromLocalStorage = () => {
+    try {
+      const u = localStorage.getItem('username');
+      setUser(u ? { username: u } : null);
+    } catch (e) {
+      // ignore
+    }
   };
 
   const addSearchHistory = (from: string, to: string) => {
@@ -138,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       getUserSecurityQuestions,
       verifySecurityAnswers,
       resetPassword
+      , setUserFromLocalStorage
     }}>
       {children}
     </AuthContext.Provider>

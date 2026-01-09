@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { X } from 'lucide-react';
@@ -10,6 +11,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
+  const { setUserFromLocalStorage } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +36,8 @@ export default function LoginPage() {
       // ✅ Store token
       localStorage.setItem('token', data.token);
       localStorage.setItem('username', username);
+      // Sync AuthContext so other pages see the logged-in user immediately
+      try { setUserFromLocalStorage(); } catch (e) {}
 
       toast.success('Login successful!');
       navigate('/dashboard');
