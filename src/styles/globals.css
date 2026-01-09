@@ -3,7 +3,7 @@
 :root {
   --font-size: 16px;
   --background: #ffffff;
-  --foreground: #000000;
+  --foreground:#000000;
   --card: #ffffff;
   --card-foreground: #000000;
   --popover: oklch(1 0 0);

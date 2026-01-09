@@ -22,7 +22,7 @@ interface RouteOption {
 export default function SearchResultsPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, addSearchHistory } = useAuth();
   const { isDarkMode, toggleTheme } = useTheme();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [routes, setRoutes] = useState<RouteOption[]>([]);
@@ -36,6 +36,7 @@ export default function SearchResultsPage() {
     geolocationError?: string;
     geocodeError?: string;
   } | null>(null);
+  const [fetchTrigger, setFetchTrigger] = useState(0);
 
   const { from, to, isGuest } = location.state || { from: '', to: '', isGuest: false };
   const [resolvedFrom, setResolvedFrom] = useState<{ latitude: number; longitude: number; name?: string } | null>(
@@ -121,7 +122,8 @@ export default function SearchResultsPage() {
         // Send request to backend
         const requestUrl = 'https://taxitera-fv1x.onrender.com/api/terminals/search';
         const payload = { latitude: coords.latitude, longitude: coords.longitude, destination: typeof to === 'string' ? to : (to as any).name };
-        setDebugInfo((cur) => ({ ...(cur || {}), payload, requestUrl }));
+        // keep request URL for debugging but do not store the full payload anymore
+        setDebugInfo((cur) => ({ ...(cur || {}), requestUrl }));
 
         const res = await fetch(requestUrl, {
           method: 'POST',
@@ -137,8 +139,87 @@ export default function SearchResultsPage() {
         }
 
         // parse JSON from the bodyText we already captured
-        const data: RouteOption[] = bodyText ? JSON.parse(bodyText) : [];
-        setRoutes(data);
+        const raw = bodyText ? JSON.parse(bodyText) : [];
+
+        // If backend returns Terminal-like objects, convert them into RouteOption entries
+        const isTerminalLike = Array.isArray(raw) && raw.length > 0 && (raw[0].name || raw[0].routes);
+
+        if (isTerminalLike) {
+          const getTerminalName = (t: any) => {
+            if (!t) return 'Unknown Terminal';
+            return t.name || t.terminal || t.title || t.displayName || 'Unknown Terminal';
+          };
+          const toLatLng = (coordsArr: any[]) => ({ lat: Number(coordsArr[1]), lon: Number(coordsArr[0]) });
+          const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+            const toRad = (v: number) => (v * Math.PI) / 180;
+            const R = 6371; // km
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+          };
+
+          const terminals = raw as any[];
+          const userLat = coords.latitude;
+          const userLon = coords.longitude;
+
+          // Sort by distance
+          const terminalsWithDist = terminals.map((t, idx) => {
+            const loc = t.location && Array.isArray(t.location.coordinates) ? toLatLng(t.location.coordinates) : { lat: 0, lon: 0 };
+            const dist = haversineKm(userLat, userLon, loc.lat, loc.lon);
+            return { t, dist, idx, loc };
+          }).sort((a,b) => a.dist - b.dist);
+
+          const generated: RouteOption[] = [];
+
+          if (terminalsWithDist.length > 0) {
+            const first = terminalsWithDist[0];
+            generated.push({
+              id: 1,
+              type: 'Best Route',
+              optionNumber: 1,
+              terminal: getTerminalName(first.t),
+              stops: Array.isArray(first.t.routes) ? first.t.routes : [],
+              duration: `${Math.max(5, Math.round(first.dist * 3))}-${Math.max(6, Math.round(first.dist * 4))} min`,
+              distance: `${first.dist.toFixed(1)} km`,
+              estimatedMoney: first.t.price ? `${first.t.price} ETB` : '—',
+            });
+          }
+
+          if (terminalsWithDist.length > 0) {
+            const nearest = terminalsWithDist[0];
+            generated.push({
+              id: 2,
+              type: 'Nearest Terminal',
+              optionNumber: 2,
+              terminal: getTerminalName(nearest.t),
+              stops: Array.isArray(nearest.t.routes) ? nearest.t.routes : [],
+              duration: `${Math.max(5, Math.round(nearest.dist * 3))}-${Math.max(6, Math.round(nearest.dist * 4))} min`,
+              distance: `${nearest.dist.toFixed(1)} km`,
+              estimatedMoney: nearest.t.price ? `${nearest.t.price} ETB` : '—',
+            });
+          }
+
+          if (terminalsWithDist.length > 1) {
+            const second = terminalsWithDist[1];
+            generated.push({
+              id: 3,
+              type: 'Fastest Route',
+              optionNumber: 3,
+              terminal: getTerminalName(second.t),
+              stops: Array.isArray(second.t.routes) ? second.t.routes : [],
+              duration: `${Math.max(5, Math.round(second.dist * 2))}-${Math.max(6, Math.round(second.dist * 3))} min`,
+              distance: `${second.dist.toFixed(1)} km`,
+              estimatedMoney: second.t.price ? `${second.t.price} ETB` : '—',
+            });
+          }
+
+          setRoutes(generated);
+        } else {
+          const data: RouteOption[] = raw as any;
+          setRoutes(data);
+        }
       } catch (err: any) {
         setError(err.message || String(err));
         console.error('SearchResults error details:', debugInfo, err);
@@ -149,6 +230,82 @@ export default function SearchResultsPage() {
 
     resolveFromAndFetch();
   }, [from, to]);
+  
+  // allow manual re-fetch when clicking "Welcome, <user>"
+  useEffect(() => {
+    if (fetchTrigger <= 0) return;
+    if (!from || !to) return;
+    // trigger the same effect by calling the same resolver via a synthetic update
+    // changing fetchTrigger will re-run the main useEffect because we will include it there
+    // simpler: call resolveFromAndFetch by creating and invoking the same logic here
+    (async () => {
+      try {
+        // reuse the existing effect by toggling resolvedFrom to null to force geolocation/geocode path
+        // but easiest is to call the original POST again using the same payload logic
+        // We replicate minimal logic: try to get coords from resolvedFrom or from object
+        let coords = resolvedFrom as any;
+        if (!coords) {
+          if (typeof from === 'object' && (from as any).latitude && (from as any).longitude) {
+            coords = { latitude: (from as any).latitude, longitude: (from as any).longitude, name: (from as any).name };
+          } else {
+            // do nothing; the main effect already handles geolocation/geocoding
+            return;
+          }
+        }
+
+        const requestUrl = 'https://taxitera-fv1x.onrender.com/api/terminals/search';
+        const payload = { latitude: coords.latitude, longitude: coords.longitude, destination: typeof to === 'string' ? to : (to as any).name };
+        const res = await fetch(requestUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const bodyText = await res.text().catch(() => '');
+        if (!res.ok) throw new Error(`Failed to fetch routes: ${res.status} ${res.statusText} ${bodyText}`);
+        const raw = bodyText ? JSON.parse(bodyText) : [];
+        const isTerminalLike = Array.isArray(raw) && raw.length > 0 && (raw[0].name || raw[0].routes);
+        if (isTerminalLike) {
+          const toLatLng = (coordsArr: any[]) => ({ lat: Number(coordsArr[1]), lon: Number(coordsArr[0]) });
+          const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+            const toRad = (v: number) => (v * Math.PI) / 180;
+            const R = 6371; // km
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+          };
+          const terminals = raw as any[];
+          const userLat = coords.latitude;
+          const userLon = coords.longitude;
+          const terminalsWithDist = terminals.map((t, idx) => {
+            const loc = t.location && Array.isArray(t.location.coordinates) ? toLatLng(t.location.coordinates) : { lat: 0, lon: 0 };
+            const dist = haversineKm(userLat, userLon, loc.lat, loc.lon);
+            return { t, dist, idx, loc };
+          }).sort((a,b) => a.dist - b.dist);
+          const generated: RouteOption[] = [];
+          const getTerminalName = (t: any) => t?.name || t?.terminal || t?.title || t?.displayName || 'Unknown Terminal';
+          if (terminalsWithDist.length > 0) {
+            const first = terminalsWithDist[0];
+            generated.push({ id: 1, type: 'Best Route', optionNumber: 1, terminal: getTerminalName(first.t), stops: Array.isArray(first.t.routes) ? first.t.routes : [], duration: `${Math.max(5, Math.round(first.dist * 3))}-${Math.max(6, Math.round(first.dist * 4))} min`, distance: `${first.dist.toFixed(1)} km`, estimatedMoney: first.t.price ? `${first.t.price} ETB` : '—' });
+          }
+          if (terminalsWithDist.length > 0) {
+            const nearest = terminalsWithDist[0];
+            generated.push({ id: 2, type: 'Nearest Terminal', optionNumber: 2, terminal: getTerminalName(nearest.t), stops: Array.isArray(nearest.t.routes) ? nearest.t.routes : [], duration: `${Math.max(5, Math.round(nearest.dist * 3))}-${Math.max(6, Math.round(nearest.dist * 4))} min`, distance: `${nearest.dist.toFixed(1)} km`, estimatedMoney: nearest.t.price ? `${nearest.t.price} ETB` : '—' });
+          }
+          if (terminalsWithDist.length > 1) {
+            const second = terminalsWithDist[1];
+            generated.push({ id: 3, type: 'Fastest Route', optionNumber: 3, terminal: getTerminalName(second.t), stops: Array.isArray(second.t.routes) ? second.t.routes : [], duration: `${Math.max(5, Math.round(second.dist * 2))}-${Math.max(6, Math.round(second.dist * 3))} min`, distance: `${second.dist.toFixed(1)} km`, estimatedMoney: second.t.price ? `${second.t.price} ETB` : '—' });
+          }
+          setRoutes(generated);
+        } else {
+          setRoutes(raw as any);
+        }
+      } catch (e) {
+        console.error('Manual fetch failed', e);
+      }
+    })();
+  }, [fetchTrigger]);
 
   const handleLogout = () => {
     logout();
@@ -156,12 +313,37 @@ export default function SearchResultsPage() {
     navigate('/');
   };
 
-  const handleRouteClick = (route: RouteOption) => {
+  const handleRouteClick = async (route: RouteOption) => {
+    if (user && !isGuest) {
+      try {
+        const token = localStorage.getItem('token');
+        await fetch('https://taxitera-fv1x.onrender.com/api/history', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ from: typeof from === 'string' ? from : (from as any).name, to: typeof to === 'string' ? to : (to as any).name }),
+        });
+        try { addSearchHistory(typeof from === 'string' ? from : (from as any).name, typeof to === 'string' ? to : (to as any).name); } catch (e) {}
+      } catch (e) {
+        console.error('Failed to save history', e);
+      }
+    }
+
+    // Save the selected route and context to localStorage so MapPage can load it
+    try {
+      const payloadForMap = { route, from: typeof from === 'string' ? from : (from as any).name, to: typeof to === 'string' ? to : (to as any).name, isGuest };
+      localStorage.setItem('lastRoute', JSON.stringify(payloadForMap));
+    } catch (e) {
+      console.error('Failed to save lastRoute to localStorage', e);
+    }
+
     navigate('/map', { state: { route, from: resolvedFrom ?? from, to, isGuest } });
   };
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? 'bg-[#1a252f]' : 'bg-gray-50'}`}>
+    <div className={`min-h-screen ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
       {/* Header */}
       <header className={`${isDarkMode ? 'bg-gray-900/90' : 'bg-white'} backdrop-blur-md border-b ${isDarkMode ? 'border-blue-500/30' : 'border-gray-200'}`}>
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -215,6 +397,9 @@ export default function SearchResultsPage() {
 
       <div className="max-w-6xl mx-auto px-6 py-8">
         <h1 className={`text-3xl mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Available Routes</h1>
+        {user && !isGuest && (
+          <button onClick={() => setFetchTrigger((s) => s + 1)} className={`mb-4 inline-block ${isDarkMode ? 'text-gray-200' : 'text-gray-700'} hover:underline`}>Welcome, {localStorage.getItem('username') || user.username}</button>
+        )}
         <div className={`flex items-center gap-3 mb-6 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
           <MapPin className={`w-6 h-6 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
           <span className="text-xl">{from}</span>
@@ -224,12 +409,7 @@ export default function SearchResultsPage() {
 
         {loading && <p className={isDarkMode ? 'text-white' : 'text-gray-800'}>Loading routes...</p>}
         {error && <p className="text-red-500 mb-4">{error}</p>}
-        {debugInfo && (
-          <div className="mt-4 p-3 bg-gray-50/90 rounded border">
-            <h4 className="text-sm font-medium mb-2">Debug info</h4>
-            <pre className="text-xs overflow-auto max-h-48">{JSON.stringify(debugInfo, null, 2)}</pre>
-          </div>
-        )}
+        {/* debugInfo UI removed now that the flow is stable */}
 
         <div className="space-y-6">
           {routes.map((route) => (

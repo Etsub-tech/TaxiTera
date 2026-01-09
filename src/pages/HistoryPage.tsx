@@ -31,14 +31,15 @@ export default function HistoryPage() {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        // Replace with your backend endpoint
-        const res = await fetch(`https://your-api.com/users/${user?.id}/history`, {
+        const token = localStorage.getItem('token');
+        const res = await fetch('https://taxitera-fv1x.onrender.com/api/history', {
           headers: {
-            Authorization: `Bearer ${user?.token}`, // If you use JWT auth
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         });
+        if (!res.ok) throw new Error('Failed to fetch history');
         const data: SearchHistoryItem[] = await res.json();
-        setSearchHistory(data);
+        setSearchHistory(data || []);
       } catch (err) {
         console.error('Failed to fetch search history', err);
       } finally {
@@ -54,7 +55,7 @@ export default function HistoryPage() {
   }, [user]);
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? 'bg-[#1a252f]' : 'bg-gray-50'}`}>
+    <div className={`min-h-screen ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
       {/* Header */}
       <header className={`${isDarkMode ? 'bg-gray-900/90' : 'bg-white'} backdrop-blur-md border-b ${isDarkMode ? 'border-blue-500/30' : 'border-gray-200'}`}>
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">

@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, MapPin, Clock, Navigation, DollarSign, Moon, Sun, User, History as HistoryIcon, LogOut, ChevronDown, AlertCircle } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, Navigation, DollarSign, Moon, Sun, User, History as HistoryIcon, LogOut, ChevronDown, AlertCircle, MapPin as MapPinned } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { toast } from 'sonner';
@@ -27,66 +27,79 @@ export default function MapPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [locationPermission, setLocationPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
-  const [route, setRoute] = useState<RouteOption | null>(null);
+  const [route, setRoute] = useState<any>(null);
 
-  const { route: passedRoute, isGuest } = location.state || {};
-
-  // Fetch route info from backend
+  // Accept route via navigation state or from the last saved route in localStorage
+  const navState = location.state || {};
   useEffect(() => {
-    if (!passedRoute) {
-      navigate(-1);
+    if (navState && navState.route) {
+      setRoute({ ...navState.route, from: navState.from, to: navState.to, isGuest: navState.isGuest });
       return;
     }
-    const fetchRoute = async () => {
-      try {
-        const res = await fetch(`https://your-backend.com/api/routes/${passedRoute.id}`);
-        if (!res.ok) throw new Error('Failed to fetch route info');
-        const data: RouteOption = await res.json();
-        setRoute(data);
-      } catch (err: any) {
-        toast.error(err.message);
+
+    // Try localStorage fallback
+    try {
+      const raw = localStorage.getItem('lastRoute');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setRoute(parsed.route ? { ...parsed.route, from: parsed.from, to: parsed.to, isGuest: parsed.isGuest } : parsed);
       }
-    };
-    fetchRoute();
-  }, [passedRoute, navigate]);
+    } catch (e) {
+      console.error('Failed to read lastRoute from localStorage', e);
+    }
+  }, [location.state]);
 
   // Request user location
   useEffect(() => {
+    requestUserLocation();
+  }, []);
+
+  const requestUserLocation = () => {
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported by your browser');
       setLocationPermission('denied');
-      toast.error('Geolocation is not supported');
+      toast.error('Geolocation is not supported by your browser');
       return;
     }
+
+    setLocationPermission('pending');
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
+        const { latitude, longitude } = position.coords;
+        setUserLocation({ lat: latitude, lng: longitude });
         setLocationPermission('granted');
-        toast.success(`Location accessed: ${position.coords.latitude}, ${position.coords.longitude}`);
+        setLocationError(null);
+        toast.success(`Location accessed: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
       },
-      (err) => {
+      (error) => {
         setLocationPermission('denied');
-        switch (err.code) {
-          case err.PERMISSION_DENIED:
-            setLocationError('Location access denied');
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError('Location access denied. Please enable location permissions in your browser.');
             toast.error('Location access denied');
             break;
-          case err.POSITION_UNAVAILABLE:
-            setLocationError('Location unavailable');
-            toast.error('Location unavailable');
+          case error.POSITION_UNAVAILABLE:
+            setLocationError('Location information unavailable');
+            toast.error('Location information unavailable');
             break;
-          case err.TIMEOUT:
+          case error.TIMEOUT:
             setLocationError('Location request timed out');
             toast.error('Location request timed out');
             break;
           default:
-            setLocationError('Unknown location error');
-            toast.error('Unknown location error');
+            setLocationError('An unknown error occurred while accessing location');
+            toast.error('Failed to access location');
+            break;
         }
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
     );
-  }, []);
+  };
 
   const handleLogout = () => {
     logout();
@@ -96,13 +109,15 @@ export default function MapPage() {
 
   if (!route) return null;
 
-  // Google Maps URL with directions
-  const mapSrc = userLocation
+  // Build iframe src
+  const mapSrc = userLocation && route.lat && route.lng
     ? `https://www.google.com/maps/embed/v1/directions?key=YOUR_GOOGLE_MAPS_API_KEY&origin=${userLocation.lat},${userLocation.lng}&destination=${route.lat},${route.lng}&mode=driving`
-    : `https://www.google.com/maps?q=${route.lat},${route.lng}&z=15&output=embed`;
+    : route.lat && route.lng
+      ? `https://www.google.com/maps?q=${route.lat},${route.lng}&z=15&output=embed`
+      : `https://www.google.com/maps?q=${encodeURIComponent(route.terminal || route.to || 'Addis Ababa')}&z=13&output=embed`;
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? 'bg-[#1a252f]' : 'bg-gray-50'}`}>
+    <div className={`min-h-screen ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
       {/* Header */}
       <header className={`${isDarkMode ? 'bg-gray-900/90' : 'bg-white'} backdrop-blur-md border-b ${isDarkMode ? 'border-blue-500/30' : 'border-gray-200'}`}>
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -111,7 +126,7 @@ export default function MapPage() {
             <button onClick={toggleTheme} className={`p-2 rounded-full ${isDarkMode ? 'bg-white/10 hover:bg-white/20' : 'bg-gray-800/10 hover:bg-gray-800/20'}`}>
               {isDarkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-blue-600" />}
             </button>
-            {user && !isGuest ? (
+            {user && !route?.isGuest ? (
               <div className="relative">
                 <button onClick={() => setProfileMenuOpen(!profileMenuOpen)} className={`flex items-center gap-2 px-4 py-2 rounded ${isDarkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-700 hover:bg-blue-800'} text-white`}>
                   <User className="w-5 h-5" /><span>{user.username}</span><ChevronDown className="w-4 h-4" />
@@ -135,26 +150,91 @@ export default function MapPage() {
       </header>
 
       <div className="max-w-6xl mx-auto px-6 py-8">
-        <h1 className={`text-3xl mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{route.type}: {route.terminal}</h1>
+        <h1 className={`text-3xl mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{route.type || 'Route'}: {route.from || 'Origin'} → {route.to || route.terminal || 'Destination'}</h1>
 
-        {/* Map */}
+        {/* Location Status Banners */}
+        {locationPermission === 'pending' && (
+          <div className={`mb-6 p-4 ${isDarkMode ? 'bg-blue-500/10 border-blue-400/40' : 'bg-blue-50 border-blue-200'} border rounded-lg flex items-center gap-3`}>
+            <MapPinned className="w-5 h-5 text-blue-400 animate-pulse" />
+            <p className={isDarkMode ? 'text-blue-300' : 'text-blue-700'}>Requesting location access...</p>
+          </div>
+        )}
+
+        {locationPermission === 'granted' && userLocation && (
+          <div className={`mb-6 p-4 ${isDarkMode ? 'bg-green-500/10 border-green-400/40' : 'bg-green-50 border-green-200'} border rounded-lg flex items-center gap-3`}>
+            <MapPinned className="w-5 h-5 text-green-400" />
+            <div>
+              <p className={isDarkMode ? 'text-green-300' : 'text-green-700'}>Location access granted</p>
+              <p className={`text-sm ${isDarkMode ? 'text-green-400/70' : 'text-green-600/70'}`}>Latitude: {userLocation.lat.toFixed(4)}, Longitude: {userLocation.lng.toFixed(4)}</p>
+            </div>
+          </div>
+        )}
+
+        {locationPermission === 'denied' && locationError && (
+          <div className={`mb-6 p-4 ${isDarkMode ? 'bg-red-500/10 border-red-400/40' : 'bg-red-50 border-red-200'} border rounded-lg`}>
+            <div className="flex items-start gap-3 mb-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className={`${isDarkMode ? 'text-red-300' : 'text-red-700'} mb-2`}>{locationError}</p>
+                <button onClick={requestUserLocation} className={`px-4 py-2 ${isDarkMode ? 'bg-red-500/20 hover:bg-red-500/30' : 'bg-red-100 hover:bg-red-200'} ${isDarkMode ? 'text-red-300' : 'text-red-700'} rounded transition-colors text-sm flex items-center gap-2`}>
+                  <MapPinned className="w-4 h-4" /> Try Again
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Embedded Map */}
         <div className="w-full h-96 rounded-lg overflow-hidden border mb-8">
-          <iframe
-            title="Map Directions"
-            width="100%"
-            height="100%"
-            src={mapSrc}
-            allowFullScreen
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-          />
+          <iframe title="Addis Ababa Map" width="100%" height="100%" loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade" src={mapSrc} />
         </div>
 
-        {/* Route Stats */}
-        <div className="grid md:grid-cols-3 gap-6 mb-6">
-          <div className="p-6 rounded-lg bg-gray-50">{/* Duration */}<Clock />{route.duration}</div>
-          <div className="p-6 rounded-lg bg-gray-50">{/* Distance */}<MapPin />{route.distance}</div>
-          {user && !isGuest && <div className="p-6 rounded-lg bg-gray-50">{/* Money */}<DollarSign />{route.estimatedMoney}</div>}
+        {/* Route Details */}
+        <div className={`${isDarkMode ? 'bg-white/10 border-blue-300/40' : 'bg-white border-gray-200'} backdrop-blur-xl border rounded-lg p-8`}>
+          <h2 className={`text-3xl mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Route Details</h2>
+          <div className={`grid ${user && !route?.isGuest ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6 mb-8`}>
+            <div className={`${isDarkMode ? 'bg-gray-800/60 border-blue-400/30' : 'bg-gray-50 border-gray-200'} border rounded-lg p-6`}> 
+              <div className="flex items-center gap-3 mb-3"><Clock className="w-6 h-6 text-green-400" /><h3 className={`text-xl ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Duration</h3></div>
+              <p className="text-3xl text-green-300">{route.duration || route.estimatedTime || '—'}</p>
+            </div>
+            <div className={`${isDarkMode ? 'bg-gray-800/60 border-blue-400/30' : 'bg-gray-50 border-gray-200'} border rounded-lg p-6`}> 
+              <div className="flex items-center gap-3 mb-3"><MapPin className="w-6 h-6 text-blue-400" /><h3 className={`text-xl ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Distance</h3></div>
+              <p className="text-3xl text-blue-300">{route.distance || '—'}</p>
+            </div>
+            {user && !route?.isGuest && (
+              <div className={`${isDarkMode ? 'bg-gray-800/60 border-blue-400/30' : 'bg-gray-50 border-gray-200'} border rounded-lg p-6`}>
+                <div className="flex items-center gap-3 mb-3"><DollarSign className="w-6 h-6 text-yellow-400" /><h3 className={`text-xl ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Estimated Money</h3></div>
+                <p className="text-3xl text-yellow-300">{route.estimatedMoney || 'N/A'}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Terminal Information */}
+          <div className={`${isDarkMode ? 'bg-gray-800/60 border-blue-400/30' : 'bg-gray-50 border-gray-200'} border rounded-lg p-6`}> 
+            <h3 className={`text-2xl mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Route Information</h3>
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-2"><MapPin className={`w-5 h-5 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} /><span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Terminal</span></div>
+              <p className={`text-xl ml-7 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{route.terminal || route.name || route.to}</p>
+            </div>
+
+            {/* Stops */}
+            {route.stops && route.stops.length > 0 && (
+              <div>
+                <p className={`mb-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Stops along the way:</p>
+                <div className="space-y-3">
+                  {route.stops.map((stop: string, index: number) => (
+                    <div key={index} className="flex items-start gap-4 ml-7">
+                      <div className="flex flex-col items-center">
+                        <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">{index + 1}</div>
+                        {index < route.stops.length - 1 && (<div className="w-1 h-8 bg-blue-500/30"></div>)}
+                      </div>
+                      <div className="flex-1 pb-2"><p className={`text-lg ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{stop}</p></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
