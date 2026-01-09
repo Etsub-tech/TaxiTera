@@ -10,3 +10,4 @@ build/
 coverage/
 .DS_Store
 .idea/
+VITE_GOOGLE_GEOCODE_API_KEY=your_google_api_key_here
