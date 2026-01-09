@@ -322,6 +322,9 @@ export default function SearchResultsPage() {
   };
 
   const handleRouteClick = async (route: RouteOption) => {
+    console.log('handleRouteClick called with route:', route);
+    console.log('Route coordinates:', { lat: route.lat, lng: route.lng });
+    
     if (user && !isGuest) {
       try {
         const token = localStorage.getItem('token');
@@ -339,15 +342,61 @@ export default function SearchResultsPage() {
       }
     }
 
+    // Ensure we have coordinates before navigating
+    let fromCoords = resolvedFrom;
+    
+    // If no resolved coordinates, try to get them
+    if (!fromCoords) {
+      try {
+        // Try browser geolocation first
+        if (navigator.geolocation) {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 });
+          });
+          fromCoords = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+        }
+      } catch (e) {
+        console.error('Could not get user location:', e);
+        // Continue without coordinates - MapPage will handle this case
+      }
+    }
+
+    console.log('Navigating to map with:', { 
+      routeId: route.id, 
+      routeType: route.type,
+      routeTerminal: route.terminal,
+      routeCoords: { lat: route.lat, lng: route.lng },
+      fromCoords, 
+      from, 
+      to, 
+      isGuest 
+    });
+
     // Save the selected route and context to localStorage so MapPage can load it
     try {
-      const payloadForMap = { route, from: typeof from === 'string' ? from : (from as any).name, to: typeof to === 'string' ? to : (to as any).name, isGuest };
+      const payloadForMap = { 
+        route, 
+        from: typeof from === 'string' ? from : (from as any).name, 
+        to: typeof to === 'string' ? to : (to as any).name, 
+        isGuest,
+        fromCoords
+      };
+      console.log('Saving to localStorage:', payloadForMap);
       localStorage.setItem('lastRoute', JSON.stringify(payloadForMap));
     } catch (e) {
       console.error('Failed to save lastRoute to localStorage', e);
     }
 
-    navigate('/map', { state: { route, from: resolvedFrom ?? from, to, isGuest } });
+    const navigationState = { 
+      route, 
+      from: fromCoords || from, 
+      to, 
+      isGuest,
+      fromCoords
+    };
+    console.log('Navigation state:', navigationState);
+
+    navigate('/map', { state: navigationState });
   };
 
   return (

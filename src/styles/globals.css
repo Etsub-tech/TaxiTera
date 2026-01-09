@@ -119,6 +119,9 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 }
+.bg-gray-800-mix {
+  background-color: color-mix(in oklab, var(--color-gray-800) 60%, transparent);
+}
 
 @layer base {
   * {

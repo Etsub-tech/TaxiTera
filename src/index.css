@@ -2029,7 +2029,7 @@
 :root {
   --font-size: 16px;
   --background: #fff;
-  --foreground: #000;
+  --foreground: #7d6bc0;
   --card: #fff;
   --card-foreground: #000;
   --popover: oklch(1 0 0);
@@ -2070,7 +2070,7 @@
 .dark {
   --background: oklch(.145 0 0);
   --foreground: oklch(.985 0 0);
-  --card: oklch(.145 0 0);
+  --card: oklch(0% 0 0).00002 271.152;
   --card-foreground: oklch(.985 0 0);
   --popover: oklch(.145 0 0);
   --popover-foreground: oklch(.985 0 0);

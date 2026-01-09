@@ -78,28 +78,8 @@ export default function DashboardPage() {
       });
     }
 
-    // Get user's location
-    const position = await new Promise<GeolocationPosition>((resolve, reject) =>
-      navigator.geolocation.getCurrentPosition(resolve, reject)
-    );
-    const latitude = position.coords.latitude;
-    const longitude = position.coords.longitude;
-
-    // Call backend to search terminals
-    const res = await fetch('https://taxitera-fv1x.onrender.com/api/terminals/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ latitude, longitude, destination: to }),
-    });
-
-    if (!res.ok) throw new Error('Failed to search terminals');
-
-    const terminals = await res.json(); // terminals already contain price
-
-    console.log('Terminals fetched:', terminals); // check in console
-
-    // Navigate to /map with terminals data
-    navigate('/map', { state: { from, to, terminals } });
+    // Navigate to search-results page
+    navigate('/search-results', { state: { from, to, isGuest: false } });
 
   } catch (err: any) {
     console.error('Search error:', err);
@@ -319,7 +299,7 @@ export default function DashboardPage() {
             {POPULAR_ROUTES.map((route, index) => (
               <div
                 key={index}
-                className={`${isDarkMode ? 'bg-gray-800/60 border-blue-400/30 hover:bg-gray-800/80' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'} border rounded p-5 transition-colors cursor-pointer group`}
+                className={`${isDarkMode ? 'pink border-blue-400/30 hover:bg-gray-800/80' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'} border rounded p-5 transition-colors cursor-pointer group`}
                 onClick={() => {
                   setFrom(route.from);
                   setTo(route.to);

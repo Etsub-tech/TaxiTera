@@ -75,7 +75,7 @@ export default function HistoryPage() {
         {loading ? (
           <p className={isDarkMode ? 'text-white' : 'text-gray-700'}>Loading...</p>
         ) : searchHistory.length === 0 ? (
-          <div className={`${isDarkMode ? 'bg-white/10 border-blue-300/40' : 'bg-white border-gray-200'} backdrop-blur-xl border rounded-lg p-12 text-center`}>
+          <div className={`${isDarkMode ? 'bg-gray-700/60 border-blue-400/30' : 'bg-white border-gray-200'} backdrop-blur-xl border rounded-lg p-12 text-center`}>
             <Clock className={`w-16 h-16 mx-auto mb-4 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} />
             <p className={`text-xl ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No search history yet</p>
             <p className={`mt-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>Start searching for routes to build your history</p>
@@ -85,7 +85,7 @@ export default function HistoryPage() {
             {searchHistory.map((item, index) => (
               <div
                 key={index}
-                className={`${isDarkMode ? 'bg-white/10 border-blue-300/40 hover:bg-white/15' : 'bg-white border-gray-200 hover:shadow-md'} backdrop-blur-xl border rounded-lg p-6 transition-all`}
+                className={`${isDarkMode ? 'bg-gray-700/60 border-blue-400/30 hover:bg-gray-700/80' : 'bg-white border-gray-200 hover:shadow-md'} backdrop-blur-xl border rounded-lg p-6 transition-all`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4 flex-1">

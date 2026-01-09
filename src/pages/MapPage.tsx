@@ -19,6 +19,7 @@ interface RouteOption {
 }
 
 export default function MapPage() {
+  console.log('MapPage component rendering');
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -29,24 +30,40 @@ export default function MapPage() {
   const [locationPermission, setLocationPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
   const [route, setRoute] = useState<any>(null);
 
-  // Accept route via navigation state or from the last saved route in localStorage
+  // Defensive check for missing navigation state at the top
   const navState = location.state || {};
+  console.log('MapPage - navState:', navState);
+  
   useEffect(() => {
-    if (navState && navState.route) {
-      setRoute({ ...navState.route, from: navState.from, to: navState.to, isGuest: navState.isGuest });
+    console.log('MapPage useEffect triggered with navState:', navState);
+    
+    // Process navigation state if route is available
+    if (navState.route) {
+      console.log('MapPage - Found route in navState, setting route:', navState.route);
+      setRoute({ ...navState.route, from: navState.from, to: navState.to, isGuest: navState.isGuest, fromCoords: navState.fromCoords });
       return;
     }
 
     // Try localStorage fallback
     try {
       const raw = localStorage.getItem('lastRoute');
+      console.log('MapPage - localStorage raw:', raw);
       if (raw) {
         const parsed = JSON.parse(raw);
-        setRoute(parsed.route ? { ...parsed.route, from: parsed.from, to: parsed.to, isGuest: parsed.isGuest } : parsed);
+        console.log('MapPage - localStorage parsed:', parsed);
+        if (parsed.route) {
+          console.log('MapPage - Found route in localStorage, setting route:', parsed.route);
+          setRoute({ ...parsed.route, from: parsed.from, to: parsed.to, isGuest: parsed.isGuest, fromCoords: parsed.fromCoords });
+          return;
+        }
       }
     } catch (e) {
       console.error('Failed to read lastRoute from localStorage', e);
     }
+    
+    // If still no route data, show error instead of crashing
+    // This will only be reached if no route data is found in navigation state or localStorage
+    console.log('MapPage - No route data found, will show error');
   }, [location.state]);
 
   // Request user location
@@ -107,14 +124,79 @@ export default function MapPage() {
     navigate('/');
   };
 
-  if (!route) return null;
+  // Show friendly error message if no route data is available
+  if (!route) {
+    console.log('MapPage - No route, showing error screen');
+    return (
+      <div className={`min-h-screen ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
+        {/* Header */}
+        <header className={`${isDarkMode ? 'bg-gray-900/90' : 'bg-white'} backdrop-blur-md border-b ${isDarkMode ? 'border-blue-500/30' : 'border-gray-200'}`}>
+          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <Link to="/"><img src={logoImage} alt="TaxiTera Logo" className="h-12 w-auto cursor-pointer" /></Link>
+            <div className="flex items-center gap-4">
+              <button onClick={toggleTheme} className={`p-2 rounded-full ${isDarkMode ? 'bg-white/10 hover:bg-white/20' : 'bg-gray-800/10 hover:bg-gray-800/20'}`}>
+                {isDarkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-blue-600" />}
+              </button>
+              {user ? (
+                <div className="relative">
+                  <button onClick={() => setProfileMenuOpen(!profileMenuOpen)} className={`flex items-center gap-2 px-4 py-2 rounded ${isDarkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-700 hover:bg-blue-800'} text-white`}>
+                    <User className="w-5 h-5" /><span>{user.username}</span><ChevronDown className="w-4 h-4" />
+                  </button>
+                  {profileMenuOpen && (
+                    <div className={`absolute right-0 mt-2 w-56 ${isDarkMode ? 'bg-gray-900/95' : 'bg-white'} border rounded shadow-xl`}>
+                      <Link to="/profile" onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-3 px-6 py-3">View Profile</Link>
+                      <Link to="/history" onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-3 px-6 py-3">History</Link>
+                      <button onClick={handleLogout} className="flex items-center gap-3 px-6 py-3">Log Out</button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex gap-4">
+                  <Link to="/login"><button className="px-6 py-2 border-2">Login</button></Link>
+                  <Link to="/register"><button className="px-6 py-2 bg-blue-700 text-white">Register</button></Link>
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+
+        <div className="max-w-6xl mx-auto px-6 py-8">
+          <div className={`${isDarkMode ? 'bg-red-500/10 border-red-400/40' : 'bg-red-50 border-red-200'} border rounded-lg p-8 text-center`}>
+            <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
+            <h1 className={`text-2xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              Missing map data
+            </h1>
+            <p className={`text-lg mb-6 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Please search for routes again to view map.
+            </p>
+            <div className="flex gap-4 justify-center">
+              <Link 
+                to={user ? "/dashboard" : "/guest-search"}
+                className={`px-6 py-3 ${isDarkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-700 hover:bg-blue-800'} text-white rounded transition-colors`}
+              >
+                Search for Routes
+              </Link>
+              <Link 
+                to="/"
+                className={`px-6 py-2 border-2 ${isDarkMode ? 'border-white text-white hover:bg-white hover:text-blue-900' : 'border-gray-800 text-gray-800 hover:bg-gray-800 hover:text-white'} rounded transition-colors`}
+              >
+                Back to Home
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  console.log('MapPage - Has route, rendering map content');
 
   // Build iframe src
   const mapSrc = userLocation && route.lat && route.lng
-    ? `https://www.google.com/maps/embed/v1/directions?key=YOUR_GOOGLE_MAPS_API_KEY&origin=${userLocation.lat},${userLocation.lng}&destination=${route.lat},${route.lng}&mode=driving`
+    ? `https://www.google.com/maps/embed/v1/directions?key=AIzaSyDfW7TSwgImAK2ZtpKAa45LKH1mufZqFOw&origin=${userLocation.lat},${userLocation.lng}&destination=${route.lat},${route.lng}&mode=driving`
     : route.lat && route.lng
-      ? `https://www.google.com/maps?q=${route.lat},${route.lng}&z=15&output=embed`
-      : `https://www.google.com/maps?q=${encodeURIComponent(route.terminal || route.to || 'Addis Ababa')}&z=13&output=embed`;
+      ? `https://www.google.com/maps/embed/v1/view?key=AIzaSyDfW7TSwgImAK2ZtpKAa45LKH1mufZqFOw&center=${route.lat},${route.lng}&zoom=15&maptype=roadmap`
+      : `https://www.google.com/maps/embed/v1/place?key=AIzaSyDfW7TSwgImAK2ZtpKAa45LKH1mufZqFOw&q=${encodeURIComponent(route.terminal || route.to || 'Addis Ababa')}&zoom=13`;
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
@@ -150,7 +232,9 @@ export default function MapPage() {
       </header>
 
       <div className="max-w-6xl mx-auto px-6 py-8">
-        <h1 className={`text-3xl mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{route.type || 'Route'}: {route.from || 'Origin'} → {route.to || route.terminal || 'Destination'}</h1>
+        <h1 className={`text-3xl mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+          {route.type || 'Route'}: {typeof route.from === 'string' ? route.from : (route.from?.name || 'Origin')} → {typeof route.to === 'string' ? route.to : (route.to?.name || route.terminal || 'Destination')}
+        </h1>
 
         {/* Location Status Banners */}
         {locationPermission === 'pending' && (
@@ -226,7 +310,7 @@ export default function MapPage() {
                     <div key={index} className="flex items-start gap-4 ml-7">
                       <div className="flex flex-col items-center">
                         <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">{index + 1}</div>
-                        {index < route.stops.length - 1 && (<div className="w-1 h-8 bg-blue-500/30"></div>)}
+                        {index < route.stops.length - 1 && <div className="w-1 h-8 bg-blue-500/30"></div>}
                       </div>
                       <div className="flex-1 pb-2"><p className={`text-lg ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{stop}</p></div>
                     </div>
