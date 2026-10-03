@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env.local
+.vscode/
+.DS_Store
+npm-debug.log
+yarn-error.log
+build/
+coverage/
+.DS_Store
+.idea/
+VITE_GOOGLE_GEOCODE_API_KEY=your_google_api_key_here
